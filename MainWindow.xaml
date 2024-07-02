@@ -7,6 +7,87 @@
         mc:Ignorable="d"
         Title="MainWindow" Height="450" Width="800">
     <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" HorizontalAlignment="Center" Margin="10">
+            <ComboBox x:Name="toolsComboBox" SelectionChanged="toolsComboBox_SelectionChanged">
+                <ComboBox.Template>
+                    <ControlTemplate TargetType="{x:Type ComboBox}">
+                        <Grid>
+                            <Button x:Name="Button" Grid.Column="2" Content="Tools" Focusable="False" ClickMode="Release" Click="tools_Clicked">
+                                <Button.Template>
+                                    <ControlTemplate TargetType="{x:Type Button}">
+                                        <Border Background="{TemplateBinding Background}">
+                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                    </ControlTemplate>
+                                </Button.Template>
+                                <Button.Style>
+                                    <Style TargetType="{x:Type Button}">
+                                        <Setter Property="Background" Value="Transparent"/>
+                                        <Style.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter Property="Background" Value="LightGray" />
+                                            </Trigger>
+                                            <Trigger Property="IsPressed" Value="True">
+                                                <Setter Property="Background" Value="DarkGray" />
+                                            </Trigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
+
+                            <Popup x:Name="Popup" AllowsTransparency="True" Focusable="False" IsOpen="{Binding IsDropDownOpen, RelativeSource={RelativeSource Mode=TemplatedParent}}" Placement="Bottom" PopupAnimation="Slide">
+                                <Grid x:Name="DropDown" SnapsToDevicePixels="True" MinWidth="{Binding ActualWidth, ElementName=labelTextBlock}" MaxHeight="{TemplateBinding MaxDropDownHeight}">
+                                    <Border x:Name="DropDownBorder" Background="White" BorderBrush="Black" BorderThickness="1">
+                                        <ScrollViewer SnapsToDevicePixels="True">
+                                            <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Contained" />
+                                        </ScrollViewer>
+                                    </Border>
+                                </Grid>
+                            </Popup>
+                        </Grid>
+                    </ControlTemplate>
+                </ComboBox.Template>
+                <ComboBoxItem Content="LabwareM"/>
+            </ComboBox>
+
+        </StackPanel>
+
+        <!-- Add other UI elements in the second row -->
+        <!-- New UI elements for creating a run -->
+        <Grid Grid.Row="1" HorizontalAlignment="Left" Margin="243,15,0,240" Width="311">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <StackPanel Grid.Row="0" Orientation="Horizontal" >
+                <Label Content="Run ID:" VerticalAlignment="Center" />
+                <TextBox x:Name="txtRunID" HorizontalAlignment="Stretch" />
+            </StackPanel>
+            <StackPanel Grid.Row="1" Orientation="Horizontal" >
+                <Label Content="Screen Number:" VerticalAlignment="Center" />
+                <TextBox x:Name="txtScreenNumber" />
+            </StackPanel>
+            <StackPanel Grid.Row="2" Orientation="Horizontal" >
+                <Label Content="User Name:" VerticalAlignment="Center" />
+                <TextBox x:Name="txtUserName" />
+            </StackPanel>
+            <StackPanel Grid.Row="3" Orientation="Horizontal" >
+                <Label Content="Current Script Line:" VerticalAlignment="Center" />
+                <TextBox x:Name="txtCurrentScriptLine" />
+            </StackPanel>
+            <Button Grid.Row="4" x:Name="btnCreateRun" Margin="5" Padding="5" Content="Create Run" Click="btnCreateRun_Click" />
+        </Grid>
+        <Button x:Name="RunCommandsButton" Content="Run Commands" HorizontalAlignment="Left" Margin="315,247,0,0" Grid.Row="1" VerticalAlignment="Top" Click="RunCommandsButton_Click"/>
+        <Button x:Name="CancelButton" Content="Cancel" HorizontalAlignment="Left" Margin="340,289,0,0" Grid.Row="1" VerticalAlignment="Top" Click="CancelButton_Click" IsEnabled="False"/>
+        <TextBlock x:Name="StatusTextBlock" Text="Ready"  HorizontalAlignment="Left" Margin="-2,327,0,0" Grid.Row="1" VerticalAlignment="Top" Height="71" Width="800"/>
         
     </Grid>
 </Window>
