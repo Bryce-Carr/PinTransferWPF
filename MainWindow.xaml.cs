@@ -16,6 +16,7 @@ namespace PinTransferWPF
         private readonly JournalParser _parser;
         private readonly CommandRunner _epsonRunner;
         private readonly CommandRunner _kx2Runner;
+        private readonly RunLogger _runLogger;
         private CancellationTokenSource _cts;
 
         public MainWindow()
@@ -24,10 +25,62 @@ namespace PinTransferWPF
             string connectionString = "Data Source=" + Parameters.LoggingDatabase;
             _events = new InstrumentEvents();
             _parser = new JournalParser(connectionString, _events);
-            _epsonRunner = new CommandRunner(_parser, "Epson");
-            _kx2Runner = new CommandRunner(_parser, "KX2");
+            _runLogger = new RunLogger(connectionString);
+            _epsonRunner = new CommandRunner(_parser, "Epson", _runLogger, _events);
+            _kx2Runner = new CommandRunner(_parser, "KX2", _runLogger, _events);
 
             SetupEventHandlers();
+            CheckForUnfinishedRun();
+        }
+
+        private void CheckForUnfinishedRun()
+        {
+            var lastRunState = _runLogger.LoadRunState("testJournal"); // TODO: Replace with actual journal ID
+            if (lastRunState != null)
+            {
+                var result = MessageBox.Show("An unfinished run was detected. Do you want to resume?", "Resume Run", MessageBoxButton.YesNo);
+                if (result == MessageBoxResult.Yes)
+                {
+                    ResumeRun(lastRunState);
+                }
+            }
+        }
+
+        private async void ResumeRun(RunState runState)
+        {
+            _events.DeserializeToolStates(runState.SerializedToolStates);
+            _events.DeserializeArmStates(runState.SerializedArmStates);
+            _events.DeserializeCarouselStates(runState.SerializedCarouselStates);
+
+            RunCommandsButton.IsEnabled = false;
+            CancelButton.IsEnabled = true;
+            StatusTextBlock.Text = string.Empty;
+            AppendStatus("Resuming run...");
+
+            _cts = new CancellationTokenSource();
+
+            try
+            {
+                await Task.WhenAll(
+                    _epsonRunner.RunCommandsAsync(runState.JournalID, runState.EpsonCommandID, _cts.Token),
+                    _kx2Runner.RunCommandsAsync(runState.JournalID, runState.KX2CommandID, _cts.Token)
+                );
+                AppendStatus("All commands completed successfully.");
+            }
+            catch (OperationCanceledException)
+            {
+                AppendStatus("Command execution was cancelled.");
+            }
+            catch (Exception ex)
+            {
+                AppendStatus($"An error occurred: {ex.Message}");
+            }
+            finally
+            {
+                RunCommandsButton.IsEnabled = true;
+                CancelButton.IsEnabled = false;
+            }
+
         }
         private void AppendStatus(string message)
         {
@@ -120,7 +173,6 @@ namespace PinTransferWPF
         {
             try
             {
-                RunLogger runLogger = new RunLogger();
                 List<Plate> SourcePlates = new List<Plate>();
                 List<Plate> DestinationPlates = new List<Plate>();
                 for (int i = 1; i < 3; i++)
@@ -149,8 +201,8 @@ namespace PinTransferWPF
                     UserName = "Bryce",
                     JournalID = "testJournal"
                 };
-                runLogger.CreateJournal(journalInfo);
-                runLogger.CreateRun(runInfo);
+                _runLogger.CreateJournal(journalInfo);
+                _runLogger.CreateRun(runInfo);
             }
             catch (Exception ex)
             {
@@ -163,7 +215,7 @@ namespace PinTransferWPF
             _events.ResetEvents();
             RunCommandsButton.IsEnabled = false;
             CancelButton.IsEnabled = true;
-            StatusTextBlock.Text = string.Empty; // Clear previous text
+            StatusTextBlock.Text = string.Empty;
             AppendStatus("Running commands...");
 
             _cts = new CancellationTokenSource();
@@ -190,12 +242,16 @@ namespace PinTransferWPF
                 CancelButton.IsEnabled = false;
             }
         }
-
+        private void ResumeButton_Click( object sender, RoutedEventArgs e)
+        {
+            var lastRunState = _runLogger.LoadRunState("testJournal"); // TODO: Replace with actual journal ID
+            ResumeRun(lastRunState);
+        }
         private void CancelButton_Click(object sender, RoutedEventArgs e)
         {
             _cts?.Cancel();
             CancelButton.IsEnabled = false;
-            StatusTextBlock.Text = "Cancelling...";
+            StatusTextBlock.Text += "Cancelling...";
         }
     }
 }

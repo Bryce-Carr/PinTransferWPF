@@ -221,12 +221,52 @@ namespace Integration
 
     public class RunLogger
     {
-        private string _connectionString;
+        private readonly string _connectionString;
 
         public RunLogger(string connectionString)
         {
             _connectionString = connectionString;
         }
+
+        public RunState GetCurrentRunState(string journalID)
+        {
+            using (var connection = new SQLiteConnection(_connectionString))
+            {
+                connection.Open();
+                using (var command = new SQLiteCommand("SELECT * FROM RunState WHERE JournalID = @JournalID", connection))
+                {
+                    command.Parameters.AddWithValue("@JournalID", journalID);
+                    using (var reader = command.ExecuteReader())
+                    {
+                        if (reader.Read())
+                        {
+                            return new RunState
+                            {
+                                JournalID = reader["JournalID"].ToString(),
+                                EpsonCommandID = Convert.ToInt32(reader["EpsonCommandID"]),
+                                KX2CommandID = Convert.ToInt32(reader["KX2CommandID"]),
+                                SerializedToolStates = reader["SerializedToolStates"].ToString(),
+                                SerializedArmStates = reader["SerializedArmStates"].ToString(),
+                                SerializedCarouselStates = reader["SerializedCarouselStates"].ToString(),
+                                LastUpdated = DateTime.Parse(reader["LastUpdated"].ToString())
+                            };
+                        }
+                        // If no existing state is found, return a new RunState with default values
+                        return new RunState
+                        {
+                            JournalID = journalID,
+                            EpsonCommandID = 1,
+                            KX2CommandID = 1,
+                            SerializedToolStates = "",
+                            SerializedArmStates = "",
+                            SerializedCarouselStates = "",
+                            LastUpdated = DateTime.UtcNow
+                        };
+                    }
+                }
+            }
+        }
+        
         public void CreateRun(RunInfo runInfo)
         {
             // Create a new SQLite connection
@@ -296,6 +336,17 @@ namespace Integration
             using (var connection = new SQLiteConnection(_connectionString))
             {
                 connection.Open();
+                using (var command = new SQLiteCommand(@"CREATE TABLE IF NOT EXISTS RunState (
+                                                JournalID TEXT PRIMARY KEY,
+                                                EpsonCommandID INTEGER NOT NULL,
+                                                KX2CommandID INTEGER NOT NULL,
+                                                SerializedToolStates TEXT NOT NULL,
+                                                SerializedArmStates TEXT NOT NULL,
+                                                SerializedCarouselStates TEXT NOT NULL,
+                                                LastUpdated TEXT NOT NULL)", connection))
+                {
+                    command.ExecuteNonQuery();
+                }
                 using (var command = new SQLiteCommand("SELECT * FROM RunState WHERE JournalID = @JournalID", connection))
                 {
                     command.Parameters.AddWithValue("@JournalID", journalID);

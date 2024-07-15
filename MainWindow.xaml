@@ -86,12 +86,13 @@
             <Button Grid.Row="4" x:Name="btnCreateRun" Margin="5" Padding="5" Content="Create Run" Click="btnCreateRun_Click" />
         </Grid>
         <Button x:Name="RunCommandsButton" Content="Run Commands" HorizontalAlignment="Left" Margin="643,101,0,0" Grid.Row="1" VerticalAlignment="Top" Click="RunCommandsButton_Click"/>
-        <Button x:Name="CancelButton" Content="Cancel" HorizontalAlignment="Left" Margin="668,143,0,0" Grid.Row="1" VerticalAlignment="Top" Click="CancelButton_Click" IsEnabled="False"/>
-        <ScrollViewer VerticalScrollBarVisibility="Auto" Name="StatusScrollViewer" Grid.Row="1" Margin="-1,158,1,0" VerticalAlignment="Top" Height="240" Width="800">
+        <Button x:Name="CancelButton" Content="Cancel" HorizontalAlignment="Left" Margin="648,143,0,0" Grid.Row="1" VerticalAlignment="Top" Click="CancelButton_Click" IsEnabled="False"/>
+        <ScrollViewer VerticalScrollBarVisibility="Auto" Name="StatusScrollViewer" Grid.Row="1" Margin="-21,158,21,0" VerticalAlignment="Top" Height="240" Width="800">
             <TextBlock x:Name="StatusTextBlock" 
                TextWrapping="Wrap" 
                VerticalAlignment="Stretch" 
                HorizontalAlignment="Left"/>
         </ScrollViewer>
+        <Button Content="ResumeButton" HorizontalAlignment="Left" Margin="692,143,0,0" Grid.Row="1" VerticalAlignment="Top" Click="ResumeButton_Click"/>
     </Grid>
 </Window>

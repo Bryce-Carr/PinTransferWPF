@@ -153,7 +153,42 @@ namespace Integration
                 }
             }
         }
+        public string SerializeArmStates()
+        {
+            return JsonSerializer.Serialize(_armStates);
+        }
 
+        public void DeserializeArmStates(string serializedArmStates)
+        {
+            var restoredStates = JsonSerializer.Deserialize<ConcurrentDictionary<string, bool>>(serializedArmStates);
+            if (restoredStates != null)
+            {
+                foreach (var kvp in restoredStates)
+                {
+                    string toolId = kvp.Key;
+                    bool states = kvp.Value;
+                    _armStates[toolId] = states;
+                }
+            }
+        }
+        public string SerializeCarouselStates()
+        {
+            return JsonSerializer.Serialize(_carouselStates);
+        }
+
+        public void DeserializeCarouselStates(string serializedCarouselStates)
+        {
+            var restoredStates = JsonSerializer.Deserialize<ConcurrentDictionary<string, bool>>(serializedCarouselStates);
+            if (restoredStates != null)
+            {
+                foreach (var kvp in restoredStates)
+                {
+                    string toolId = kvp.Key;
+                    bool states = kvp.Value;
+                    _carouselStates[toolId] = states;
+                }
+            }
+        }
         public async Task WaitForToolState(string toolId, string state, bool expectedValue, CancellationToken cancellationToken)
         {
             var toolStates = _toolStates.GetOrAdd(toolId, _ => new ConcurrentDictionary<string, bool>());
@@ -504,15 +539,20 @@ namespace Integration
     {
         private readonly JournalParser _parser;
         private readonly string _instrument;
+        private readonly RunLogger _runLogger;
+        private readonly InstrumentEvents _events;
 
-        public CommandRunner(JournalParser parser, string instrument)
+        public CommandRunner(JournalParser parser, string instrument, RunLogger runLogger, InstrumentEvents events)
         {
             _parser = parser;
             _instrument = instrument;
+            _runLogger = runLogger;
+            _events = events;
         }
 
-        public async Task RunCommandsAsync(string journalID, int commandID, CancellationToken ct)
+        public async Task RunCommandsAsync(string journalID, int startCommandID, CancellationToken ct)
         {
+            int commandID = startCommandID;
             while (!ct.IsCancellationRequested)
             {
                 string command = await _parser.GetNextCommandAsync(journalID, commandID, _instrument);
@@ -520,10 +560,31 @@ namespace Integration
                 {
                     break; // No more commands
                 }
-
                 await _parser.RunNextCommandAsync(_instrument, command, ct);
                 commandID++;
+
+                // Save state after each command
+                SaveRunState(journalID, commandID);
             }
+        }
+
+        private void SaveRunState(string journalID, int commandID)
+        {
+            // Fetch the current run state
+            var currentState = _runLogger.GetCurrentRunState(journalID);
+
+            // Update only the relevant instrument's command ID
+            var runState = new RunState
+            {
+                JournalID = journalID,
+                EpsonCommandID = _instrument == "Epson" ? commandID : currentState.EpsonCommandID,
+                KX2CommandID = _instrument == "KX2" ? commandID : currentState.KX2CommandID,
+                SerializedToolStates = _events.SerializeToolStates(),
+                SerializedArmStates = _events.SerializeArmStates(),
+                SerializedCarouselStates = _events.SerializeCarouselStates()
+            };
+
+            _runLogger.SaveRunState(runState);
         }
     }
 }
