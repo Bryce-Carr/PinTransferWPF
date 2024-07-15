@@ -202,8 +202,31 @@ namespace Integration
             ScreenNumber = null;
         }
     }
+
+    public class RunState
+    {
+        public string JournalID { get; set; }
+        public int EpsonCommandID { get; set; }
+        public int KX2CommandID { get; set; }
+        public string SerializedToolStates { get; set; }
+        public string SerializedArmStates { get; set; }
+        public string SerializedCarouselStates { get; set; }
+        public DateTime LastUpdated { get; set; }
+
+        public RunState()
+        {
+            LastUpdated = DateTime.Now;
+        }
+    }
+
     public class RunLogger
     {
+        private string _connectionString;
+
+        public RunLogger(string connectionString)
+        {
+            _connectionString = connectionString;
+        }
         public void CreateRun(RunInfo runInfo)
         {
             // Create a new SQLite connection
@@ -234,6 +257,67 @@ namespace Integration
                     command.ExecuteNonQuery();
                 }
             }
+        }
+        public void SaveRunState(RunState state)
+        {
+            using (var connection = new SQLiteConnection(_connectionString))
+            {
+                connection.Open();
+                using (var command = new SQLiteCommand(@"CREATE TABLE IF NOT EXISTS RunState (
+                                                JournalID TEXT PRIMARY KEY,
+                                                EpsonCommandID INTEGER NOT NULL,
+                                                KX2CommandID INTEGER NOT NULL,
+                                                SerializedToolStates TEXT NOT NULL,
+                                                SerializedArmStates TEXT NOT NULL,
+                                                SerializedCarouselStates TEXT NOT NULL,
+                                                LastUpdated TEXT NOT NULL)", connection))
+                {
+                    command.ExecuteNonQuery();
+                }
+
+                using (var command = new SQLiteCommand(@"INSERT OR REPLACE INTO RunState 
+                (JournalID, EpsonCommandID, KX2CommandID, SerializedToolStates, SerializedArmStates, SerializedCarouselStates, LastUpdated)
+                VALUES (@JournalID, @EpsonCommandID, @KX2CommandID, @SerializedToolStates, @SerializedArmStates, @SerializedCarouselStates, @LastUpdated)", connection))
+                {
+                    command.Parameters.AddWithValue("@JournalID", state.JournalID);
+                    command.Parameters.AddWithValue("@EpsonCommandID", state.EpsonCommandID);
+                    command.Parameters.AddWithValue("@KX2CommandID", state.KX2CommandID);
+                    command.Parameters.AddWithValue("@SerializedToolStates", state.SerializedToolStates);
+                    command.Parameters.AddWithValue("@SerializedArmStates", state.SerializedArmStates);
+                    command.Parameters.AddWithValue("@SerializedCarouselStates", state.SerializedCarouselStates);
+                    command.Parameters.AddWithValue("@LastUpdated", state.LastUpdated.ToString("O"));
+                    command.ExecuteNonQuery();
+                }
+            }
+        }
+
+        public RunState LoadRunState(string journalID)
+        {
+            using (var connection = new SQLiteConnection(_connectionString))
+            {
+                connection.Open();
+                using (var command = new SQLiteCommand("SELECT * FROM RunState WHERE JournalID = @JournalID", connection))
+                {
+                    command.Parameters.AddWithValue("@JournalID", journalID);
+                    using (var reader = command.ExecuteReader())
+                    {
+                        if (reader.Read())
+                        {
+                            return new RunState
+                            {
+                                JournalID = reader.GetString(0),
+                                EpsonCommandID = reader.GetInt32(1),
+                                KX2CommandID = reader.GetInt32(2),
+                                SerializedToolStates = reader.GetString(3),
+                                SerializedArmStates = reader.GetString(4),
+                                SerializedCarouselStates = reader.GetString(5),
+                                LastUpdated = DateTime.Parse(reader.GetString(6))
+                            };
+                        }
+                    }
+                }
+            }
+            return null;
         }
 
         public class JournalInfo
@@ -291,7 +375,7 @@ namespace Integration
             foreach (SourcePlate plate in journalInfo.SourcePlates)
             {
                 kx2Commands.Add("Get Source from Stack");
-                kx2Commands.Add("Set Source to Transfer Station");
+                kx2Commands.Add("Set Source to Stage");
                 transferVolume = plate.replicates.Item1;
                 if (previousTransferVolume != transferVolume)
                 {
@@ -309,19 +393,19 @@ namespace Integration
                 for (int replicate = 0; replicate < plate.replicates.Item2; replicate += 1)
                 {
                     kx2Commands.Add("Get Destination from Stack");
-                    kx2Commands.Add("Set Destination to Transfer Station");
+                    kx2Commands.Add("Set Destination to Stage");
                     kx2Commands.Add("Move Safe");
-                    kx2Commands.Add("Get Destination from Transfer Station");
+                    kx2Commands.Add("Get Destination from Stage");
                     kx2Commands.Add("Set Destination to Stack");
                     epsonCommands.Add("Wash " + transferVolume.ToString());
-                    epsonCommands.Add("Transfer" + transferVolume.ToString());
-                    epsonCommands.Add("Move Safe");
+                    epsonCommands.Add("Transfer " + transferVolume.ToString());
+                    epsonCommands.Add("Move Safe" + transferVolume.ToString());
                 }
 
-
-                kx2Commands.Add("Get Source from Transfer Station");
+                kx2Commands.Add("Get Source from Stage");
                 kx2Commands.Add("Set Source to Stack");
             }
+            epsonCommands.Add("Wash " + transferVolume.ToString());
             epsonCommands.Add("Detach " + toolVolumeAttached);
 
             for (int i = 0; i < kx2Commands.Count; i++)

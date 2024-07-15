@@ -10,6 +10,8 @@ using static Integration.InstrumentEvents;
 using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
 using System.Text.Json;
+using System.Windows.Controls;
+using System.Collections.Generic;
 
 namespace Integration
 {
@@ -21,8 +23,116 @@ namespace Integration
         public event EpsonEventHandler OnToolDetached;
         public event EpsonEventHandler OnWashCompleted;
         public event EpsonEventHandler OnTransferCompleted;
+        public event EpsonEventHandler OnToolSafe;
+
+        public async Task RaiseToolAttached(string toolId, CancellationToken cancellationToken)
+        {
+            if (OnToolAttached != null)
+            {
+                //TODO: what if pause happens here? need to re set all toolid states attached to false..
+                await OnToolAttached(toolId, cancellationToken);
+                SetToolState(toolId, "attached", true);
+                SetToolState(toolId, "safe", true);
+            }
+        }
+
+        public async Task RaiseToolDetached(string toolId, CancellationToken cancellationToken)
+        {
+            if (OnToolDetached != null)
+            {
+                await OnToolDetached(toolId, cancellationToken);
+                SetToolState(toolId, "attached", false);
+            }
+        }
+
+        public async Task RaiseWashCompleted(string toolId, CancellationToken cancellationToken)
+        {
+            if (OnWashCompleted != null)
+            {
+                await OnWashCompleted(toolId, cancellationToken);
+                SetToolState(toolId, "washed", true);
+            }
+        }
+
+        public async Task RaiseTransferCompleted(string toolId, CancellationToken cancellationToken)
+        {
+            if (OnTransferCompleted != null)
+            {
+                SetToolState(toolId, "safe", false);
+                await OnTransferCompleted(toolId, cancellationToken);
+                SetToolState(toolId, "transferred", true);
+                SetToolState(toolId, "washed", false);
+            }
+        }
+
+        public async Task RaiseToolSafe(string toolId, CancellationToken cancellationToken)
+        {
+            if (OnToolSafe != null)
+            {
+                await OnToolSafe(toolId, cancellationToken);
+                SetToolState(toolId, "safe", true);
+            }
+        }
+
+
+        public delegate Task KX2PlateEventHandler(string plateType, CancellationToken cancellationToken);
+        public delegate Task KX2EventHandler(CancellationToken cancellationToken);
+
+        public event KX2PlateEventHandler OnPlateGrabbedFromHotel;
+        public event KX2PlateEventHandler OnPlatePlacedToStage;
+        public event KX2PlateEventHandler OnPlateGrabbedFromStage;
+        public event KX2PlateEventHandler OnPlatePlacedToHotel;
+        public event KX2EventHandler OnArmSafe;
+        
+        public async Task RaisePlateGrabbedFromHotel(string plateType, CancellationToken cancellationToken)
+        {
+            if (OnArmSafe != null)
+            {
+                await OnPlateGrabbedFromHotel(plateType, cancellationToken);
+                SetArmState("plate_gripped", true);
+            }
+        }
+        public async Task RaisePlatePlacedToStage(string plateType, CancellationToken cancellationToken)
+        {
+            if (OnArmSafe != null)
+            {
+                SetArmState("safe", false);
+                await OnPlatePlacedToStage(plateType, cancellationToken);
+                SetArmState("plate_gripped", false);
+            }
+        }
+        public async Task RaisePlateGrabbedFromStage(string plateType, CancellationToken cancellationToken)
+        {
+            if (OnArmSafe != null)
+            {
+                SetArmState("safe", false);
+                await OnPlateGrabbedFromStage(plateType, cancellationToken);
+                SetArmState("plate_gripped", true);
+            }
+        }
+        public async Task RaisePlatePlacedToHotel(string plateType, CancellationToken cancellationToken)
+        {
+            if (OnArmSafe != null)
+            {
+                await OnPlatePlacedToHotel(plateType, cancellationToken);
+                SetArmState("plate_gripped", false);
+            }
+        }
+        public async Task RaiseArmSafe(CancellationToken cancellationToken)
+        {
+            if (OnArmSafe != null)
+            {
+                await OnArmSafe(cancellationToken);
+                SetArmState("safe", true);
+            }
+        }
+
+        public delegate Task CarouselEventHandler(CancellationToken cancellationToken);
+        public event CarouselEventHandler OnMoved;
 
         private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, bool>> _toolStates = new ConcurrentDictionary<string, ConcurrentDictionary<string, bool>>();
+        private readonly ConcurrentDictionary<string, bool> _armStates = new ConcurrentDictionary<string, bool>();
+        private readonly ConcurrentDictionary<string, bool> _carouselStates = new ConcurrentDictionary<string, bool>();
         private readonly ConcurrentDictionary<string, SemaphoreSlim> _eventSemaphores = new ConcurrentDictionary<string, SemaphoreSlim>();
 
         public string SerializeToolStates()
@@ -30,7 +140,7 @@ namespace Integration
             return JsonSerializer.Serialize(_toolStates);
         }
 
-        public void RestoreToolStates(string serializedToolStates)
+        public void DeserializeToolStates(string serializedToolStates)
         {
             var restoredStates = JsonSerializer.Deserialize<ConcurrentDictionary<string, ConcurrentDictionary<string, bool>>>(serializedToolStates);
             if (restoredStates != null)
@@ -41,42 +151,6 @@ namespace Integration
                     ConcurrentDictionary<string, bool> states = kvp.Value;
                     _toolStates[toolId] = states;
                 }
-            }
-        }
-
-        public async Task RaiseToolAttached(string toolId, CancellationToken cancellationToken)
-        {
-            if (OnToolAttached != null)
-            {
-                await OnToolAttached(toolId, cancellationToken);
-                SetToolState(toolId, "Attached", true);
-            }
-        }
-
-        public async Task RaiseToolDetached(string toolId, CancellationToken cancellationToken)
-        {
-            if (OnToolDetached != null)
-            {
-                await OnToolDetached(toolId, cancellationToken);
-                SetToolState(toolId, "Attached", false);
-            }
-        }
-
-        public async Task RaiseWashCompleted(string toolId, CancellationToken cancellationToken)
-        {
-            if (OnWashCompleted != null)
-            {
-                await OnWashCompleted(toolId, cancellationToken);
-                SetToolState(toolId, "Washed", true);
-            }
-        }
-
-        public async Task RaiseTransferCompleted(string toolId, CancellationToken cancellationToken)
-        {
-            if (OnTransferCompleted != null)
-            {
-                await OnTransferCompleted(toolId, cancellationToken);
-                SetToolState(toolId, "Transferred", true);
             }
         }
 
@@ -93,7 +167,6 @@ namespace Integration
             var semaphore = _eventSemaphores.GetOrAdd(semaphoreKey, _ => new SemaphoreSlim(0, 1));
             await semaphore.WaitAsync(cancellationToken);
         }
-
         private void SetToolState(string toolId, string state, bool value)
         {
             var toolStates = _toolStates.GetOrAdd(toolId, _ => new ConcurrentDictionary<string, bool>());
@@ -106,14 +179,83 @@ namespace Integration
             }
         }
 
+        public async Task WaitForArmState(string state, bool expectedValue, CancellationToken cancellationToken)
+        {
+            var armState = _armStates.GetOrAdd(state, expectedValue);
+
+            if (armState == expectedValue)
+            {
+                return; // Tool is already in the expected state
+            }
+
+            var semaphoreKey = $"arm_{state}_{expectedValue}";
+            var semaphore = _eventSemaphores.GetOrAdd(semaphoreKey, _ => new SemaphoreSlim(0, 1));
+            await semaphore.WaitAsync(cancellationToken);
+        }
+
+        private void SetArmState(string state, bool value)
+        {
+            var armState = _armStates.GetOrAdd(state, value);
+
+            var semaphoreKey = $"arm_{state}_{value}";
+            if (_eventSemaphores.TryGetValue(semaphoreKey, out var semaphore))
+            {
+                semaphore.Release();
+            }
+        }
+
+        public async Task WaitForCarouselState(string state, bool expectedValue, CancellationToken cancellationToken)
+        {
+            var carouselState = _carouselStates.GetOrAdd(state, expectedValue);
+
+            if (carouselState == expectedValue)
+            {
+                return; // Tool is already in the expected state
+            }
+
+            var semaphoreKey = $"carousel_{state}_{expectedValue}";
+            var semaphore = _eventSemaphores.GetOrAdd(semaphoreKey, _ => new SemaphoreSlim(0, 1));
+            await semaphore.WaitAsync(cancellationToken);
+        }
+
+        private void SetCarouselState(string state, bool value)
+        {
+            var carouselState = _carouselStates.GetOrAdd(state, value);
+
+            var semaphoreKey = $"carousel_{state}_{value}";
+            if (_eventSemaphores.TryGetValue(semaphoreKey, out var semaphore))
+            {
+                semaphore.Release();
+            }
+        }
+
         public void ResetEvents()
         {
+            // Sets all states according to a fresh, ready-to-run pin transfer configuration
             _toolStates.Clear();
+            _armStates.Clear();
+            _carouselStates.Clear();
             foreach (var semaphore in _eventSemaphores.Values)
             {
                 semaphore.Dispose();
             }
             _eventSemaphores.Clear();
+
+            SetArmState("plate_gripped", false);
+            SetArmState("safe", false);
+            SetToolState("33", "attached", false);
+            SetToolState("96", "attached", false);
+            SetToolState("100", "attached", false);
+            SetToolState("300", "attached", false);
+            SetToolState("33", "washed", false);
+            SetToolState("96", "washed", false);
+            SetToolState("100", "washed", false);
+            SetToolState("300", "washed", false);
+            SetToolState("33", "safe", false);
+            SetToolState("96", "safe", false);
+            SetToolState("100", "safe", false);
+            SetToolState("300", "safe", false);
+            SetCarouselState("safe", true);
         }
     }
 
@@ -137,27 +279,6 @@ namespace Integration
         {
             _connectionString = connectionString;
             _events = events;
-        }
-        public string GetNextCommand(string journalID, int commandID, string instrument)
-        {
-            string commandString;
-            // Create a new SQLite connection
-            using (var _connection = new SQLiteConnection("Data Source=" + Parameters.LoggingDatabase))
-            {
-                _connection.Open();
-                using (var command = new SQLiteCommand("SELECT COMMAND FROM InstrumentCommands WHERE JournalID = '@JournalID' AND CommandID = '@CommandID' AND Instrument = '@Instrument'", _connection))
-                {
-                    command.Parameters.AddWithValue("@JournalID", journalID);
-                    command.Parameters.AddWithValue("@CommandID", commandID);
-                    command.Parameters.AddWithValue("@Instrument", instrument);
-                    using (var reader = command.ExecuteReader())
-                    {
-                        reader.Read();
-                        commandString = reader.GetString(0);
-                        return commandString;
-                    }
-                }
-            }
         }
 
         public async Task<string> GetNextCommandAsync(string journalID, int commandID, string instrument)
@@ -191,7 +312,7 @@ namespace Integration
                     await RunEpsonCommandAsync(commandString, ct);
                     break;
                 case "KX2":
-                    //await RunKX2CommandAsync(commandString, ct);
+                    await RunKX2CommandAsync(commandString, ct);
                     break;
                 default:
                     Console.WriteLine("Instrument not supported");
@@ -205,35 +326,166 @@ namespace Integration
 
             if (commandString.StartsWith("Attach"))
             {
-                await _events.WaitForToolState("33", "Detached", true, ct);
-                await _events.WaitForToolState("100", "Detached", true, ct);
-                await _events.WaitForToolState("300", "Detached", true, ct);
+                await _events.WaitForToolState("33", "attached", false, ct);
+                await _events.WaitForToolState("100", "attached", false, ct);
+                await _events.WaitForToolState("300", "attached", false, ct);
+                await _events.WaitForToolState("96", "attached", false, ct);
                 await _events.RaiseToolAttached(toolId, ct);
             }
             else if (commandString.StartsWith("Detach"))
             {
-                await _events.WaitForToolState(toolId, "Attached", true, ct);
+                await _events.WaitForToolState(toolId, "attached", true, ct);
                 await _events.RaiseToolDetached(toolId, ct);
             }
             else if (commandString.StartsWith("Wash"))
             {
-                await _events.WaitForToolState(toolId, "Attached", true, ct);
+                await _events.WaitForToolState(toolId, "attached", true, ct);
                 await _events.RaiseWashCompleted(toolId, ct);
             }
             else if (commandString.StartsWith("Transfer"))
             {
-                await _events.WaitForToolState(toolId, "Washed", true, ct);
+                await _events.WaitForToolState(toolId, "washed", true, ct);
+                await _events.WaitForArmState("safe", true, ct);
                 await _events.RaiseTransferCompleted(toolId, ct);
+            }
+            else if (commandString.StartsWith("Move Safe"))
+            {
+                await _events.WaitForToolState(toolId, "transferred", true, ct);
+                await _events.RaiseToolSafe(toolId, ct);
             }
             else
             {
-                throw new ArgumentException($"Unknown command: {commandString}");
+                throw new ArgumentException($"No logic implemented for command: {commandString}");
             }
         }
+        public async Task WaitForAnyToolSafe(IEnumerable<string> toolIds, CancellationToken cancellationToken)
+        {
+            if (toolIds == null || !toolIds.Any())
+                throw new ArgumentException("At least one tool ID must be provided.", nameof(toolIds));
 
+            var tasks = toolIds.Select(toolId => _events.WaitForToolState(toolId, "safe", true, cancellationToken));
+            await Task.WhenAny(tasks);
+        }
+        //private async Task RunKX2CommandAsync(string commandString, CancellationToken ct)
+        //{
+        //    var toolIds = new[] { "tool1", "tool2", "tool3", "tool4" };
+        //    if (commandString.StartsWith("Get Source from"))
+        //    {
+        //        if (commandString.Contains("Stack"))
+        //        {
+        //            await _events.WaitForCarouselState("safe", true, ct);
+        //            await _events.RaisePlateGrabbedFromHotel("source", ct);
+        //        }
+        //        else if (commandString.Contains("Stage"))
+        //        {
+        //            await WaitForAnyToolSafe(toolIds, ct);
+        //            await _events.RaisePlateGrabbedFromStage("source", ct);
+        //        }
+        //    }
+        //    else if (commandString.StartsWith("Get Destination from"))
+        //    {
+        //        if (commandString.Contains("Stack"))
+        //        {
+        //            await _events.WaitForCarouselState("safe", true, ct);
+        //            await _events.RaisePlateGrabbedFromHotel("destination", ct);
+        //        }
+        //        else if (commandString.Contains("Stage"))
+        //        {
+        //            await WaitForAnyToolSafe(toolIds, ct);
+        //            await _events.RaisePlateGrabbedFromStage("destination", ct);
+        //        }
+        //    }
+        //    else if (commandString.StartsWith("Set Source to"))
+        //    {
+        //        if (commandString.Contains("Stack"))
+        //        {
+        //            await _events.WaitForCarouselState("safe", true, ct);
+        //            await _events.RaisePlatePlacedToHotel("source", ct);
+        //        }
+        //        else if (commandString.Contains("Stage"))
+        //        {
+        //            await WaitForAnyToolSafe(toolIds, ct);
+        //            await _events.RaisePlatePlacedToHotel("source", ct);
+        //        }
+        //    }
+        //    else if (commandString.StartsWith("Set Destination to"))
+        //    {
+        //        if (commandString.Contains("Stack"))
+        //        {
+        //            await _events.WaitForCarouselState("safe", true, ct);
+        //            await _events.RaisePlatePlacedToHotel("destination", ct);
+        //        }
+        //        else if (commandString.Contains("Stage"))
+        //        {
+        //            await _events.RaisePlatePlacedToHotel("destination", ct);
+        //        }
+        //    }
+        //    else if (commandString.StartsWith("Move Safe"))
+        //    {
+        //        await _events.RaiseArmSafe(ct);
+        //    }
+        //}
+
+        private async Task RunKX2CommandAsync(string commandString, CancellationToken ct)
+        {
+            var toolIds = new[] { "33", "96", "100", "300" };
+            var parts = commandString.Split(' ');
+
+            if (parts.Length < 2) return;
+
+            var action = parts[0];
+
+            if (action == "Move" && parts.Length >= 2 && parts[1] == "Safe")
+            {
+                await _events.RaiseArmSafe(ct);
+                return;
+            }
+
+            if (parts.Length < 4) return;
+
+            var type = parts[1].ToLower();
+            var location = parts[3].ToLower();
+
+            switch (action)
+            {
+                case "Get":
+                    await HandleGetCommand(type, location, toolIds, ct);
+                    break;
+                case "Set":
+                    await HandleSetCommand(type, location, toolIds, ct);
+                    break;
+            }
+        }
+        private async Task HandleGetCommand(string type, string location, string[] toolIds, CancellationToken ct)
+        {
+            if (location == "stack")
+            {
+                await _events.WaitForCarouselState("safe", true, ct);
+                await _events.RaisePlateGrabbedFromHotel(type, ct);
+            }
+            else if (location == "stage")
+            {
+                await WaitForAnyToolSafe(toolIds, ct);
+                await _events.RaisePlateGrabbedFromStage(type, ct);
+            }
+        }
+        private async Task HandleSetCommand(string type, string location, string[] toolIds, CancellationToken ct)
+        {
+            if (location == "stack")
+            {
+                await _events.WaitForCarouselState("safe", true, ct);
+                await _events.RaisePlatePlacedToHotel(type, ct);
+            }
+            else if (location == "stage")
+            {
+                await WaitForAnyToolSafe(toolIds, ct);
+                await _events.RaisePlatePlacedToStage(type, ct);
+            }
+        }
         private string ExtractToolId(string commandString)
         {
             // Use a regular expression to match the pattern "Tool" followed by one or more digits
+            // Assumes that the only numerical values in commandString represent the tool size
             Match match = Regex.Match(commandString, @"(\d+)");
 
             if (match.Success)
@@ -259,9 +511,8 @@ namespace Integration
             _instrument = instrument;
         }
 
-        public async Task RunCommandsAsync(string journalID, CancellationToken ct)
+        public async Task RunCommandsAsync(string journalID, int commandID, CancellationToken ct)
         {
-            int commandID = 1;
             while (!ct.IsCancellationRequested)
             {
                 string command = await _parser.GetNextCommandAsync(journalID, commandID, _instrument);
