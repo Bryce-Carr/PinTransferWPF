@@ -17,6 +17,33 @@ using System.ComponentModel.Design;
 
 namespace Integration
 {
+    // Extension method for WaitHandle to support async/await
+    public static class WaitHandleExtensions
+    {
+        public static Task WaitOneAsync(this WaitHandle waitHandle, CancellationToken cancellationToken)
+        {
+            if (waitHandle == null)
+                throw new ArgumentNullException(nameof(waitHandle));
+
+            var tcs = new TaskCompletionSource<bool>();
+            var rwh = ThreadPool.RegisterWaitForSingleObject(waitHandle,
+                (state, timedOut) => ((TaskCompletionSource<bool>)state).TrySetResult(!timedOut),
+                tcs, -1, true);
+
+            var cancelRegistration = cancellationToken.Register(() =>
+            {
+                rwh.Unregister(null);
+                tcs.TrySetCanceled(cancellationToken);
+            });
+
+            return tcs.Task.ContinueWith(t =>
+            {
+                cancelRegistration.Dispose();
+                return t;
+            }, TaskScheduler.Default).Unwrap();
+        }
+    }
+
     public class InstrumentEvents
     {
         public delegate Task EpsonEventHandler(string toolId, CancellationToken cancellationToken);
@@ -141,7 +168,7 @@ namespace Integration
         private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, bool>> _toolStates = new ConcurrentDictionary<string, ConcurrentDictionary<string, bool>>();
         private readonly ConcurrentDictionary<string, bool> _armStates = new ConcurrentDictionary<string, bool>();
         private readonly ConcurrentDictionary<string, bool> _carouselStates = new ConcurrentDictionary<string, bool>();
-        private readonly ConcurrentDictionary<string, SemaphoreSlim> _eventSemaphores = new ConcurrentDictionary<string, SemaphoreSlim>();
+        private readonly ConcurrentDictionary<string, ManualResetEventSlim> _eventSignals = new ConcurrentDictionary<string, ManualResetEventSlim>();
 
         public string SerializeToolStates()
         {
@@ -199,28 +226,55 @@ namespace Integration
         }
         public async Task WaitForToolState(string toolId, string state, bool expectedValue, CancellationToken cancellationToken)
         {
-            if (_toolStates.TryGetValue(toolId, out var toolStates))
+            if (_toolStates.TryGetValue(toolId, out var toolStates) &&
+               toolStates.TryGetValue(state, out var currentValue) &&
+               currentValue == expectedValue)
             {
-                if (toolStates.TryGetValue(state, out bool currentValue) && currentValue == expectedValue)
-                {
-                    return; // Tool is already in the expected state
-                }
+                return;
             }
 
-            var semaphoreKey = $"{toolId}_{state}_{expectedValue}";
-            SemaphoreSlim semaphore;
+            var signalKey = $"{toolId}_{state}_{expectedValue}";
+            //ManualResetEventSlim signal;
 
-            if (!_eventSemaphores.TryGetValue(semaphoreKey, out semaphore))
+            //if (!_eventSignals.TryGetValue(signalKey, out signal))
+            //{
+            //    signal = new ManualResetEventSlim(false);
+            //    if (!_eventSignals.TryAdd(signalKey, signal))
+            //    {
+            //        // If another thread has added a signal, use that one instead
+            //        signal.Dispose();
+            //        _eventSignals.TryGetValue(signalKey, out signal);
+            //    }
+            //}
+
+            //try
+            //{
+            //    await signal.WaitHandle.WaitOneAsync(cancellationToken);
+            //}
+            //finally
+            //{
+            //    // If we're the last waiter, remove the signal
+            //    if (signal.IsSet)
+            //    {
+            //        _eventSignals.TryRemove(signalKey, out _);
+            //        signal.Dispose();
+            //    }
+            //}
+            var signal = _eventSignals.GetOrAdd(signalKey, _ => new ManualResetEventSlim(false));
+
+            try
             {
-                semaphore = new SemaphoreSlim(0, 1);
-                if (!_eventSemaphores.TryAdd(semaphoreKey, semaphore))
+                await signal.WaitHandle.WaitOneAsync(cancellationToken);
+            }
+            finally
+            {
+                // If we're the last waiter, remove the signal
+                if (signal.IsSet)
                 {
-                    // If another thread has added a semaphore, use that one instead
-                    _eventSemaphores.TryGetValue(semaphoreKey, out semaphore);
+                    _eventSignals.TryRemove(signalKey, out _);
+                    signal.Dispose();
                 }
             }
-
-            await semaphore.WaitAsync(cancellationToken);
         }
 
         private void SetToolState(string toolId, string state, bool value)
@@ -233,11 +287,11 @@ namespace Integration
                     return existingStates;
                 });
 
-            var semaphoreKey = $"{toolId}_{state}_{value}";
-            if (_eventSemaphores.TryGetValue(semaphoreKey, out var semaphore))
+            var signalKey = $"{toolId}_{state}_{value}";
+            if (_eventSignals.TryRemove(signalKey, out var signal))
             {
-                semaphore.Release();
-                _eventSemaphores.TryRemove(semaphoreKey, out _);
+                signal.Set(); // This releases all waiting threads
+                signal.Dispose();
             }
         }
 
@@ -250,19 +304,32 @@ namespace Integration
                 return; // arm is already in the expected state
             }
 
-            var semaphoreKey = $"arm_{state}_{expectedValue}";
-            var semaphore = _eventSemaphores.GetOrAdd(semaphoreKey, _ => new SemaphoreSlim(0, 1));
-            await semaphore.WaitAsync(cancellationToken);
+            var signalKey = $"arm_{state}_{expectedValue}";
+            var signal = _eventSignals.GetOrAdd(signalKey, _ => new ManualResetEventSlim(false));
+
+            try
+            {
+                await signal.WaitHandle.WaitOneAsync(cancellationToken);
+            }
+            finally
+            {
+                if (signal.IsSet)
+                {
+                    _eventSignals.TryRemove(signalKey, out _);
+                    signal.Dispose();
+                }
+            }
         }
 
         private void SetArmState(string state, bool value)
         {
             _armStates.AddOrUpdate(state, value, (key, oldValue) => value);
 
-            var semaphoreKey = $"arm_{state}_{value}";
-            if (_eventSemaphores.TryGetValue(semaphoreKey, out var semaphore))
+            var signalKey = $"arm_{state}_{value}";
+            if (_eventSignals.TryRemove(signalKey, out var signal))
             {
-                semaphore.Release();
+                signal.Set(); // This releases all waiting threads
+                signal.Dispose();
             }
         }
 
@@ -272,23 +339,35 @@ namespace Integration
 
             if (carouselState == expectedValue)
             {
-                return; // Tool is already in the expected state
+                return; // Carousel is already in the expected state
             }
 
-            var semaphoreKey = $"carousel_{state}_{expectedValue}";
-            var semaphore = _eventSemaphores.GetOrAdd(semaphoreKey, _ => new SemaphoreSlim(0, 1));
-            await semaphore.WaitAsync(cancellationToken);
+            var signalKey = $"carousel_{state}_{expectedValue}";
+            var signal = _eventSignals.GetOrAdd(signalKey, _ => new ManualResetEventSlim(false));
+
+            try
+            {
+                await signal.WaitHandle.WaitOneAsync(cancellationToken);
+            }
+            finally
+            {
+                if (signal.IsSet)
+                {
+                    _eventSignals.TryRemove(signalKey, out _);
+                    signal.Dispose();
+                }
+            }
         }
 
         private void SetCarouselState(string state, bool value)
         {
             _carouselStates.AddOrUpdate(state, value, (key, oldValue) => value);
 
-            var semaphoreKey = $"carousel_{state}_{value}";
-            if (_eventSemaphores.TryGetValue(semaphoreKey, out var semaphore))
+            var signalKey = $"carousel_{state}_{value}";
+            if (_eventSignals.TryRemove(signalKey, out var signal))
             {
-                semaphore.Release();
-                _eventSemaphores.TryRemove(semaphoreKey, out _);
+                signal.Set(); // This releases all waiting threads
+                signal.Dispose();
             }
         }
 
@@ -298,11 +377,11 @@ namespace Integration
             _toolStates.Clear();
             _armStates.Clear();
             _carouselStates.Clear();
-            foreach (var semaphore in _eventSemaphores.Values)
+            foreach (var semaphore in _eventSignals.Values)
             {
                 semaphore.Dispose();
             }
-            _eventSemaphores.Clear();
+            _eventSignals.Clear();
 
             SetArmState("plate_gripped", false);
             SetArmState("safe", false);
