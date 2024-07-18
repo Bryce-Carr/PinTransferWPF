@@ -212,9 +212,11 @@ namespace Integration
         public string SerializedArmStates { get; set; }
         public string SerializedCarouselStates { get; set; }
         public DateTime LastUpdated { get; set; }
+        public int Completed { get; set; }
 
         public RunState()
         {
+            Completed = 0;
             LastUpdated = DateTime.Now;
         }
     }
@@ -226,6 +228,67 @@ namespace Integration
         public RunLogger(string connectionString)
         {
             _connectionString = connectionString;
+            CreateRunStateTable();
+        }
+
+        // Helper method to check if a table exists
+        private bool TableExists(SQLiteConnection connection, string tableName)
+        {
+            using (var command = new SQLiteCommand($"SELECT name FROM sqlite_master WHERE type='table' AND name='{tableName}';", connection))
+            {
+                using (var reader = command.ExecuteReader())
+                {
+                    return reader.HasRows;
+                }
+            }
+        }
+
+        public void MarkRunAsCompleted(string journalID)
+        {
+            using (var connection = new SQLiteConnection(_connectionString))
+            {
+                connection.Open();
+                using (var command = new SQLiteCommand("UPDATE RunState SET Completed = 1 WHERE JournalID = @JournalID", connection))
+                {
+                    command.Parameters.AddWithValue("@JournalID", journalID);
+                    command.ExecuteNonQuery();
+                }
+            }
+        }
+
+        public RunState LoadMostRecentUnfinishedRunState()
+        {
+            using (var connection = new SQLiteConnection(_connectionString))
+            {
+                connection.Open();
+
+                if (!TableExists(connection, "RunState"))
+                {
+                    return null;
+                }
+
+                using (var command = new SQLiteCommand("SELECT * FROM RunState WHERE Completed = 0 ORDER BY LastUpdated DESC LIMIT 1", connection))
+                {
+                    using (var reader = command.ExecuteReader())
+                    {
+                        if (reader.Read())
+                        {
+                            return new RunState
+                            {
+                                JournalID = reader.GetString(0),
+                                EpsonCommandID = reader.GetInt32(1),
+                                KX2CommandID = reader.GetInt32(2),
+                                SerializedToolStates = reader.GetString(3),
+                                SerializedArmStates = reader.GetString(4),
+                                SerializedCarouselStates = reader.GetString(5),
+                                LastUpdated = DateTime.Parse(reader.GetString(6)),
+                                Completed = reader.GetInt32(7)
+                            };
+                        }
+                    }
+                }
+            }
+            return null;
         }
 
         public RunState GetCurrentRunState(string journalID)
@@ -248,7 +311,8 @@ namespace Integration
                                 SerializedToolStates = reader["SerializedToolStates"].ToString(),
                                 SerializedArmStates = reader["SerializedArmStates"].ToString(),
                                 SerializedCarouselStates = reader["SerializedCarouselStates"].ToString(),
-                                LastUpdated = DateTime.Parse(reader["LastUpdated"].ToString())
+                                LastUpdated = DateTime.Parse(reader["LastUpdated"].ToString()),
+                                Completed = Convert.ToInt32(reader["Completed"]),
                             };
                         }
                         // If no existing state is found, return a new RunState with default values
@@ -260,7 +324,8 @@ namespace Integration
                             SerializedToolStates = "",
                             SerializedArmStates = "",
                             SerializedCarouselStates = "",
-                            LastUpdated = DateTime.UtcNow
+                            LastUpdated = DateTime.UtcNow,
+                            Completed = 0
                         };
                     }
                 }
@@ -298,6 +363,27 @@ namespace Integration
                 }
             }
         }
+
+        public void CreateRunStateTable()
+        {
+            using (var connection = new SQLiteConnection(_connectionString))
+            {
+                connection.Open();
+                using (var command = new SQLiteCommand(@"CREATE TABLE IF NOT EXISTS RunState (
+                                                JournalID TEXT PRIMARY KEY,
+                                                EpsonCommandID INTEGER NOT NULL,
+                                                KX2CommandID INTEGER NOT NULL,
+                                                SerializedToolStates TEXT NOT NULL,
+                                                SerializedArmStates TEXT NOT NULL,
+                                                SerializedCarouselStates TEXT NOT NULL,
+                                                LastUpdated TEXT NOT NULL,
+                                                Completed INTEGER NOT NULL)", connection))
+                {
+                    command.ExecuteNonQuery();
+                }
+            }
+        }
+
         public void SaveRunState(RunState state)
         {
             using (var connection = new SQLiteConnection(_connectionString))
@@ -310,14 +396,15 @@ namespace Integration
                                                 SerializedToolStates TEXT NOT NULL,
                                                 SerializedArmStates TEXT NOT NULL,
                                                 SerializedCarouselStates TEXT NOT NULL,
-                                                LastUpdated TEXT NOT NULL)", connection))
+                                                LastUpdated TEXT NOT NULL,
+                                                Completed INTEGER NOT NULL)", connection))
                 {
                     command.ExecuteNonQuery();
                 }
 
                 using (var command = new SQLiteCommand(@"INSERT OR REPLACE INTO RunState 
-                (JournalID, EpsonCommandID, KX2CommandID, SerializedToolStates, SerializedArmStates, SerializedCarouselStates, LastUpdated)
-                VALUES (@JournalID, @EpsonCommandID, @KX2CommandID, @SerializedToolStates, @SerializedArmStates, @SerializedCarouselStates, @LastUpdated)", connection))
+                (JournalID, EpsonCommandID, KX2CommandID, SerializedToolStates, SerializedArmStates, SerializedCarouselStates, LastUpdated, Completed)
+                VALUES (@JournalID, @EpsonCommandID, @KX2CommandID, @SerializedToolStates, @SerializedArmStates, @SerializedCarouselStates, @LastUpdated, @Completed)", connection))
                 {
                     command.Parameters.AddWithValue("@JournalID", state.JournalID);
                     command.Parameters.AddWithValue("@EpsonCommandID", state.EpsonCommandID);
@@ -326,6 +413,7 @@ namespace Integration
                     command.Parameters.AddWithValue("@SerializedArmStates", state.SerializedArmStates);
                     command.Parameters.AddWithValue("@SerializedCarouselStates", state.SerializedCarouselStates);
                     command.Parameters.AddWithValue("@LastUpdated", state.LastUpdated.ToString("O"));
+                    command.Parameters.AddWithValue("@Completed", state.Completed);
                     command.ExecuteNonQuery();
                 }
             }
@@ -343,7 +431,8 @@ namespace Integration
                                                 SerializedToolStates TEXT NOT NULL,
                                                 SerializedArmStates TEXT NOT NULL,
                                                 SerializedCarouselStates TEXT NOT NULL,
-                                                LastUpdated TEXT NOT NULL)", connection))
+                                                LastUpdated TEXT NOT NULL,
+                                                Completed INTEGER NOT NULL)", connection))
                 {
                     command.ExecuteNonQuery();
                 }
@@ -362,7 +451,8 @@ namespace Integration
                                 SerializedToolStates = reader.GetString(3),
                                 SerializedArmStates = reader.GetString(4),
                                 SerializedCarouselStates = reader.GetString(5),
-                                LastUpdated = DateTime.Parse(reader.GetString(6))
+                                LastUpdated = DateTime.Parse(reader.GetString(6)),
+                                Completed = reader.GetInt32(1),
                             };
                         }
                     }
@@ -450,7 +540,7 @@ namespace Integration
                     kx2Commands.Add("Set Destination to Stack");
                     epsonCommands.Add("Wash " + transferVolume.ToString());
                     epsonCommands.Add("Transfer " + transferVolume.ToString());
-                    epsonCommands.Add("Move Safe" + transferVolume.ToString());
+                    epsonCommands.Add("Move Safe " + transferVolume.ToString());
                 }
 
                 kx2Commands.Add("Get Source from Stage");

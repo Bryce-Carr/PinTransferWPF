@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel.Design;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -35,19 +36,19 @@ namespace PinTransferWPF
 
         private void CheckForUnfinishedRun()
         {
-            var lastRunState = _runLogger.LoadRunState("testJournal"); // TODO: Replace with actual journal ID
-            if (lastRunState != null)
+            var lastUnfinishedRunState = _runLogger.LoadMostRecentUnfinishedRunState();
+            if (lastUnfinishedRunState != null)
             {
-                var result = MessageBox.Show("An unfinished run was detected. Do you want to resume?", "Resume Run", MessageBoxButton.YesNo);
+                var result = MessageBox.Show($"An unfinished run was detected (Journal ID: {lastUnfinishedRunState.JournalID}). Do you want to resume?", "Resume Run", MessageBoxButton.YesNo);
                 if (result == MessageBoxResult.Yes)
                 {
-                    ResumeRun(lastRunState);
+                    ResumeRun(lastUnfinishedRunState);
                 }
             }
         }
 
         private async void ResumeRun(RunState runState)
-        {
+        { 
             _events.DeserializeToolStates(runState.SerializedToolStates);
             _events.DeserializeArmStates(runState.SerializedArmStates);
             _events.DeserializeCarouselStates(runState.SerializedCarouselStates);
@@ -55,7 +56,7 @@ namespace PinTransferWPF
             RunCommandsButton.IsEnabled = false;
             CancelButton.IsEnabled = true;
             StatusTextBlock.Text = string.Empty;
-            AppendStatus("Resuming run...");
+            AppendStatus($"Resuming run for Journal ID: {runState.JournalID}...");
 
             _cts = new CancellationTokenSource();
 
@@ -66,6 +67,7 @@ namespace PinTransferWPF
                     _kx2Runner.RunCommandsAsync(runState.JournalID, runState.KX2CommandID, _cts.Token)
                 );
                 AppendStatus("All commands completed successfully.");
+                _runLogger.MarkRunAsCompleted(runState.JournalID);
             }
             catch (OperationCanceledException)
             {
@@ -80,8 +82,8 @@ namespace PinTransferWPF
                 RunCommandsButton.IsEnabled = true;
                 CancelButton.IsEnabled = false;
             }
-
         }
+
         private void AppendStatus(string message)
         {
             Dispatcher.InvokeAsync(() =>
@@ -220,13 +222,16 @@ namespace PinTransferWPF
 
             _cts = new CancellationTokenSource();
 
+            string currentJournalID = "testJournal"; // Replace with actual journal ID
+
             try
             {
                 await Task.WhenAll(
-                    _epsonRunner.RunCommandsAsync("testJournal", 1, _cts.Token),
-                    _kx2Runner.RunCommandsAsync("testJournal", 1, _cts.Token)
+                    _epsonRunner.RunCommandsAsync(currentJournalID, 1, _cts.Token),
+                    _kx2Runner.RunCommandsAsync(currentJournalID, 1, _cts.Token)
                 );
                 AppendStatus("All commands completed successfully.");
+                _runLogger.MarkRunAsCompleted(currentJournalID);
             }
             catch (OperationCanceledException)
             {
@@ -242,6 +247,7 @@ namespace PinTransferWPF
                 CancelButton.IsEnabled = false;
             }
         }
+
         private void ResumeButton_Click( object sender, RoutedEventArgs e)
         {
             var lastRunState = _runLogger.LoadRunState("testJournal"); // TODO: Replace with actual journal ID

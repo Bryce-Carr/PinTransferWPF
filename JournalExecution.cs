@@ -12,6 +12,8 @@ using System.Text.RegularExpressions;
 using System.Text.Json;
 using System.Windows.Controls;
 using System.Collections.Generic;
+using System.Data.SqlTypes;
+using System.ComponentModel.Design;
 
 namespace Integration
 {
@@ -62,6 +64,7 @@ namespace Integration
                 await OnTransferCompleted(toolId, cancellationToken);
                 SetToolState(toolId, "transferred", true);
                 SetToolState(toolId, "washed", false);
+                SetArmState("destination_transferred", true);
             }
         }
 
@@ -71,6 +74,7 @@ namespace Integration
             {
                 await OnToolSafe(toolId, cancellationToken);
                 SetToolState(toolId, "safe", true);
+                SetToolState(toolId, "transferred", false);
             }
         }
 
@@ -107,6 +111,10 @@ namespace Integration
             {
                 SetArmState("safe", false);
                 await OnPlateGrabbedFromStage(plateType, cancellationToken);
+                if (plateType == "destination")
+                {
+                    SetArmState("destination_transferred", false);
+                }
                 SetArmState("plate_gripped", true);
             }
         }
@@ -191,26 +199,45 @@ namespace Integration
         }
         public async Task WaitForToolState(string toolId, string state, bool expectedValue, CancellationToken cancellationToken)
         {
-            var toolStates = _toolStates.GetOrAdd(toolId, _ => new ConcurrentDictionary<string, bool>());
-
-            if (toolStates.TryGetValue(state, out bool currentValue) && currentValue == expectedValue)
+            if (_toolStates.TryGetValue(toolId, out var toolStates))
             {
-                return; // Tool is already in the expected state
+                if (toolStates.TryGetValue(state, out bool currentValue) && currentValue == expectedValue)
+                {
+                    return; // Tool is already in the expected state
+                }
             }
 
             var semaphoreKey = $"{toolId}_{state}_{expectedValue}";
-            var semaphore = _eventSemaphores.GetOrAdd(semaphoreKey, _ => new SemaphoreSlim(0, 1));
+            SemaphoreSlim semaphore;
+
+            if (!_eventSemaphores.TryGetValue(semaphoreKey, out semaphore))
+            {
+                semaphore = new SemaphoreSlim(0, 1);
+                if (!_eventSemaphores.TryAdd(semaphoreKey, semaphore))
+                {
+                    // If another thread has added a semaphore, use that one instead
+                    _eventSemaphores.TryGetValue(semaphoreKey, out semaphore);
+                }
+            }
+
             await semaphore.WaitAsync(cancellationToken);
         }
+
         private void SetToolState(string toolId, string state, bool value)
         {
-            var toolStates = _toolStates.GetOrAdd(toolId, _ => new ConcurrentDictionary<string, bool>());
-            toolStates[state] = value;
+            _toolStates.AddOrUpdate(toolId,
+                _ => new ConcurrentDictionary<string, bool> { [state] = value },
+                (_, existingStates) =>
+                {
+                    existingStates[state] = value;
+                    return existingStates;
+                });
 
             var semaphoreKey = $"{toolId}_{state}_{value}";
             if (_eventSemaphores.TryGetValue(semaphoreKey, out var semaphore))
             {
                 semaphore.Release();
+                _eventSemaphores.TryRemove(semaphoreKey, out _);
             }
         }
 
@@ -220,7 +247,7 @@ namespace Integration
 
             if (armState == expectedValue)
             {
-                return; // Tool is already in the expected state
+                return; // arm is already in the expected state
             }
 
             var semaphoreKey = $"arm_{state}_{expectedValue}";
@@ -230,7 +257,7 @@ namespace Integration
 
         private void SetArmState(string state, bool value)
         {
-            var armState = _armStates.GetOrAdd(state, value);
+            _armStates.AddOrUpdate(state, value, (key, oldValue) => value);
 
             var semaphoreKey = $"arm_{state}_{value}";
             if (_eventSemaphores.TryGetValue(semaphoreKey, out var semaphore))
@@ -255,12 +282,13 @@ namespace Integration
 
         private void SetCarouselState(string state, bool value)
         {
-            var carouselState = _carouselStates.GetOrAdd(state, value);
+            _carouselStates.AddOrUpdate(state, value, (key, oldValue) => value);
 
             var semaphoreKey = $"carousel_{state}_{value}";
             if (_eventSemaphores.TryGetValue(semaphoreKey, out var semaphore))
             {
                 semaphore.Release();
+                _eventSemaphores.TryRemove(semaphoreKey, out _);
             }
         }
 
@@ -278,6 +306,7 @@ namespace Integration
 
             SetArmState("plate_gripped", false);
             SetArmState("safe", false);
+            SetArmState("destination_transferred", false);
             SetToolState("33", "attached", false);
             SetToolState("96", "attached", false);
             SetToolState("100", "attached", false);
@@ -290,6 +319,10 @@ namespace Integration
             SetToolState("96", "safe", false);
             SetToolState("100", "safe", false);
             SetToolState("300", "safe", false);
+            SetToolState("33", "transferred", false);
+            SetToolState("96", "transferred", false);
+            SetToolState("100", "transferred", false);
+            SetToolState("300", "transferred", false);
             SetCarouselState("safe", true);
         }
     }
@@ -379,8 +412,11 @@ namespace Integration
             }
             else if (commandString.StartsWith("Transfer"))
             {
-                await _events.WaitForToolState(toolId, "washed", true, ct);
-                await _events.WaitForArmState("safe", true, ct);
+                await Task.WhenAll(
+                    _events.WaitForToolState(toolId, "washed", true, ct),
+                    _events.WaitForArmState("safe", true, ct)
+                );
+
                 await _events.RaiseTransferCompleted(toolId, ct);
             }
             else if (commandString.StartsWith("Move Safe"))
@@ -401,65 +437,6 @@ namespace Integration
             var tasks = toolIds.Select(toolId => _events.WaitForToolState(toolId, "safe", true, cancellationToken));
             await Task.WhenAny(tasks);
         }
-        //private async Task RunKX2CommandAsync(string commandString, CancellationToken ct)
-        //{
-        //    var toolIds = new[] { "tool1", "tool2", "tool3", "tool4" };
-        //    if (commandString.StartsWith("Get Source from"))
-        //    {
-        //        if (commandString.Contains("Stack"))
-        //        {
-        //            await _events.WaitForCarouselState("safe", true, ct);
-        //            await _events.RaisePlateGrabbedFromHotel("source", ct);
-        //        }
-        //        else if (commandString.Contains("Stage"))
-        //        {
-        //            await WaitForAnyToolSafe(toolIds, ct);
-        //            await _events.RaisePlateGrabbedFromStage("source", ct);
-        //        }
-        //    }
-        //    else if (commandString.StartsWith("Get Destination from"))
-        //    {
-        //        if (commandString.Contains("Stack"))
-        //        {
-        //            await _events.WaitForCarouselState("safe", true, ct);
-        //            await _events.RaisePlateGrabbedFromHotel("destination", ct);
-        //        }
-        //        else if (commandString.Contains("Stage"))
-        //        {
-        //            await WaitForAnyToolSafe(toolIds, ct);
-        //            await _events.RaisePlateGrabbedFromStage("destination", ct);
-        //        }
-        //    }
-        //    else if (commandString.StartsWith("Set Source to"))
-        //    {
-        //        if (commandString.Contains("Stack"))
-        //        {
-        //            await _events.WaitForCarouselState("safe", true, ct);
-        //            await _events.RaisePlatePlacedToHotel("source", ct);
-        //        }
-        //        else if (commandString.Contains("Stage"))
-        //        {
-        //            await WaitForAnyToolSafe(toolIds, ct);
-        //            await _events.RaisePlatePlacedToHotel("source", ct);
-        //        }
-        //    }
-        //    else if (commandString.StartsWith("Set Destination to"))
-        //    {
-        //        if (commandString.Contains("Stack"))
-        //        {
-        //            await _events.WaitForCarouselState("safe", true, ct);
-        //            await _events.RaisePlatePlacedToHotel("destination", ct);
-        //        }
-        //        else if (commandString.Contains("Stage"))
-        //        {
-        //            await _events.RaisePlatePlacedToHotel("destination", ct);
-        //        }
-        //    }
-        //    else if (commandString.StartsWith("Move Safe"))
-        //    {
-        //        await _events.RaiseArmSafe(ct);
-        //    }
-        //}
 
         private async Task RunKX2CommandAsync(string commandString, CancellationToken ct)
         {
@@ -501,6 +478,7 @@ namespace Integration
             else if (location == "stage")
             {
                 await WaitForAnyToolSafe(toolIds, ct);
+                await _events.WaitForArmState("destination_transferred", true, ct);
                 await _events.RaisePlateGrabbedFromStage(type, ct);
             }
         }
@@ -553,6 +531,7 @@ namespace Integration
         public async Task RunCommandsAsync(string journalID, int startCommandID, CancellationToken ct)
         {
             int commandID = startCommandID;
+            SaveRunState(journalID, commandID);
             while (!ct.IsCancellationRequested)
             {
                 string command = await _parser.GetNextCommandAsync(journalID, commandID, _instrument);
@@ -560,15 +539,26 @@ namespace Integration
                 {
                     break; // No more commands
                 }
-                await _parser.RunNextCommandAsync(_instrument, command, ct);
-                commandID++;
+                try
+                {
+                    await _parser.RunNextCommandAsync(_instrument, command, ct);
+                    commandID++;
+                }
+                catch (OperationCanceledException)
+                {
+                    // Handle pause/cancellation
+                }
+                finally
+                {
+                    // Save state after each command, even if it was cancelled
+                    SaveRunState(journalID, commandID);
 
-                // Save state after each command
-                SaveRunState(journalID, commandID);
+                    
+                }
             }
         }
 
-        private void SaveRunState(string journalID, int commandID)
+        public void SaveRunState(string journalID, int commandID)
         {
             // Fetch the current run state
             var currentState = _runLogger.GetCurrentRunState(journalID);
