@@ -18,7 +18,7 @@ namespace Integration
     {
         private readonly SQLiteConnection _connection;
         private readonly bool _shouldDisposeConnection;
-        private string _connectionString;
+        private readonly string _connectionString;
         public LabwareManager(string connectionString)
         {
             _connectionString = connectionString;
@@ -210,9 +210,13 @@ namespace Integration
         public int KX2CommandID { get; set; }
         public string SerializedToolStates { get; set; }
         public string SerializedArmStates { get; set; }
+        public string SerializedStageStates { get; set; }
         public string SerializedCarouselStates { get; set; }
+        public string Plates { get; set; }
+        public string InitialPlates { get; set; }
         public DateTime LastUpdated { get; set; }
         public int Completed { get; set; }
+        public int CarouselPosition { get; set; }
 
         public RunState()
         {
@@ -261,14 +265,33 @@ namespace Integration
             using (var connection = new SQLiteConnection(_connectionString))
             {
                 connection.Open();
-
                 if (!TableExists(connection, "RunState"))
                 {
                     return null;
                 }
 
-                using (var command = new SQLiteCommand("SELECT * FROM RunState WHERE Completed = 0 ORDER BY LastUpdated DESC LIMIT 1", connection))
+                // First, get the most recent LastUpdated timestamp
+                string getMostRecentDateSql = "SELECT MAX(LastUpdated) FROM RunState";
+                DateTime mostRecentDate;
+                using (var command = new SQLiteCommand(getMostRecentDateSql, connection))
                 {
+                    var result = command.ExecuteScalar();
+                    if (result == null || result == DBNull.Value)
+                    {
+                        return null; // No runs exist
+                    }
+                    mostRecentDate = DateTime.Parse(result.ToString());
+                }
+
+                // Now, get the most recent unfinished run, but only if it matches the most recent date
+                string sql = @"
+                                SELECT * FROM RunState 
+                                WHERE Completed = 0 AND LastUpdated = @mostRecentDate 
+                                ORDER BY LastUpdated DESC LIMIT 1";
+
+                using (var command = new SQLiteCommand(sql, connection))
+                {
+                    command.Parameters.AddWithValue("@mostRecentDate", mostRecentDate.ToString("O")); // Use ISO 8601 format
                     using (var reader = command.ExecuteReader())
                     {
                         if (reader.Read())
@@ -280,9 +303,12 @@ namespace Integration
                                 KX2CommandID = reader.GetInt32(2),
                                 SerializedToolStates = reader.GetString(3),
                                 SerializedArmStates = reader.GetString(4),
-                                SerializedCarouselStates = reader.GetString(5),
-                                LastUpdated = DateTime.Parse(reader.GetString(6)),
-                                Completed = reader.GetInt32(7)
+                                SerializedStageStates = reader.GetString(5),
+                                SerializedCarouselStates = reader.GetString(6),
+                                Plates = reader.GetString(7),
+                                InitialPlates = reader.GetString(8),
+                                LastUpdated = DateTime.Parse(reader.GetString(9)),
+                                Completed = reader.GetInt32(10)
                             };
                         }
                     }
@@ -310,7 +336,10 @@ namespace Integration
                                 KX2CommandID = Convert.ToInt32(reader["KX2CommandID"]),
                                 SerializedToolStates = reader["SerializedToolStates"].ToString(),
                                 SerializedArmStates = reader["SerializedArmStates"].ToString(),
+                                SerializedStageStates = reader["SerializedStageStates"].ToString(),
                                 SerializedCarouselStates = reader["SerializedCarouselStates"].ToString(),
+                                Plates = reader["Plates"].ToString(),
+                                InitialPlates = reader["InitialPlates"].ToString(),
                                 LastUpdated = DateTime.Parse(reader["LastUpdated"].ToString()),
                                 Completed = Convert.ToInt32(reader["Completed"]),
                             };
@@ -323,7 +352,10 @@ namespace Integration
                             KX2CommandID = 1,
                             SerializedToolStates = "",
                             SerializedArmStates = "",
+                            SerializedStageStates = "",
                             SerializedCarouselStates = "",
+                            Plates = "",
+                            InitialPlates = "",
                             LastUpdated = DateTime.UtcNow,
                             Completed = 0
                         };
@@ -375,7 +407,10 @@ namespace Integration
                                                 KX2CommandID INTEGER NOT NULL,
                                                 SerializedToolStates TEXT NOT NULL,
                                                 SerializedArmStates TEXT NOT NULL,
+                                                SerializedStageStates TEXT NOT NULL,
                                                 SerializedCarouselStates TEXT NOT NULL,
+                                                Plates TEXT NOT NULL,
+                                                InitialPlates TEXT NOT NULL,
                                                 LastUpdated TEXT NOT NULL,
                                                 Completed INTEGER NOT NULL)", connection))
                 {
@@ -395,7 +430,10 @@ namespace Integration
                                                 KX2CommandID INTEGER NOT NULL,
                                                 SerializedToolStates TEXT NOT NULL,
                                                 SerializedArmStates TEXT NOT NULL,
+                                                SerializedStageStates TEXT NOT NULL,
                                                 SerializedCarouselStates TEXT NOT NULL,
+                                                Plates TEXT NOT NULL,
+                                                InitialPlates TEXT NOT NULL,
                                                 LastUpdated TEXT NOT NULL,
                                                 Completed INTEGER NOT NULL)", connection))
                 {
@@ -403,15 +441,18 @@ namespace Integration
                 }
 
                 using (var command = new SQLiteCommand(@"INSERT OR REPLACE INTO RunState 
-                (JournalID, EpsonCommandID, KX2CommandID, SerializedToolStates, SerializedArmStates, SerializedCarouselStates, LastUpdated, Completed)
-                VALUES (@JournalID, @EpsonCommandID, @KX2CommandID, @SerializedToolStates, @SerializedArmStates, @SerializedCarouselStates, @LastUpdated, @Completed)", connection))
+                (JournalID, EpsonCommandID, KX2CommandID, SerializedToolStates, SerializedArmStates, SerializedStageStates, SerializedCarouselStates, Plates, InitialPlates, LastUpdated, Completed)
+                VALUES (@JournalID, @EpsonCommandID, @KX2CommandID, @SerializedToolStates, @SerializedArmStates, @SerializedStageStates, @SerializedCarouselStates, @Plates, @InitialPlates, @LastUpdated, @Completed)", connection))
                 {
                     command.Parameters.AddWithValue("@JournalID", state.JournalID);
                     command.Parameters.AddWithValue("@EpsonCommandID", state.EpsonCommandID);
                     command.Parameters.AddWithValue("@KX2CommandID", state.KX2CommandID);
                     command.Parameters.AddWithValue("@SerializedToolStates", state.SerializedToolStates);
                     command.Parameters.AddWithValue("@SerializedArmStates", state.SerializedArmStates);
+                    command.Parameters.AddWithValue("@SerializedStageStates", state.SerializedStageStates);
                     command.Parameters.AddWithValue("@SerializedCarouselStates", state.SerializedCarouselStates);
+                    command.Parameters.AddWithValue("@Plates", state.Plates);
+                    command.Parameters.AddWithValue("@InitialPlates", state.InitialPlates);
                     command.Parameters.AddWithValue("@LastUpdated", state.LastUpdated.ToString("O"));
                     command.Parameters.AddWithValue("@Completed", state.Completed);
                     command.ExecuteNonQuery();
@@ -430,7 +471,10 @@ namespace Integration
                                                 KX2CommandID INTEGER NOT NULL,
                                                 SerializedToolStates TEXT NOT NULL,
                                                 SerializedArmStates TEXT NOT NULL,
+                                                SerializedStageStates TEXT NOT NULL,
                                                 SerializedCarouselStates TEXT NOT NULL,
+                                                Plates TEXT NOT NULL,
+                                                InitialPlates TEXT NOT NULL,
                                                 LastUpdated TEXT NOT NULL,
                                                 Completed INTEGER NOT NULL)", connection))
                 {
@@ -450,9 +494,12 @@ namespace Integration
                                 KX2CommandID = reader.GetInt32(2),
                                 SerializedToolStates = reader.GetString(3),
                                 SerializedArmStates = reader.GetString(4),
-                                SerializedCarouselStates = reader.GetString(5),
-                                LastUpdated = DateTime.Parse(reader.GetString(6)),
-                                Completed = reader.GetInt32(1),
+                                SerializedStageStates = reader.GetString(5),
+                                SerializedCarouselStates = reader.GetString(6),
+                                Plates = reader.GetString(7),
+                                InitialPlates = reader.GetString(8),
+                                LastUpdated = DateTime.Parse(reader.GetString(9)),
+                                Completed = reader.GetInt32(10),
                             };
                         }
                     }
@@ -464,8 +511,8 @@ namespace Integration
         public class JournalInfo
         {
             public string JournalID { get; set;}
-            public List<Plate> SourcePlates { get; set; }
-            public List<Plate> DestinationPlates { get; set; }
+            public List<SourcePlate> SourcePlates { get; set; }
+            public List<DestinationPlate> DestinationPlates { get; set; }
         }
         public void CreateJournal(JournalInfo journalInfo)
         {
@@ -513,11 +560,12 @@ namespace Integration
             int toolVolumeAttached = 0;
             bool toolAttached = false;
 
-            foreach (SourcePlate plate in journalInfo.SourcePlates)
+            foreach (SourcePlate sourcePlate in journalInfo.SourcePlates)
             {
-                kx2Commands.Add("Get Source from Stack");
-                kx2Commands.Add("Set Source to Stage");
-                transferVolume = plate.replicates.Item1;
+                kx2Commands.Add($"Get Source {sourcePlate.ID} from Stack");
+                kx2Commands.Add($"Set Source {sourcePlate.ID} to Stage");
+                transferVolume = sourcePlate.Replicates.Item1;
+
                 if (previousTransferVolume != transferVolume)
                 {
                     if (toolAttached)
@@ -531,23 +579,27 @@ namespace Integration
                     previousTransferVolume = transferVolume;
                 }
 
-                for (int replicate = 0; replicate < plate.replicates.Item2; replicate += 1)
+                var destinationPlates = journalInfo.DestinationPlates.Where(dp => dp.SourcePlates.ContainsKey(sourcePlate.ID)).ToList();
+
+                //for (int replicate = 0; replicate < plate.Replicates.Item2; replicate += 1)
+                foreach (var destPlate in destinationPlates)
                 {
-                    kx2Commands.Add("Get Destination from Stack");
-                    kx2Commands.Add("Set Destination to Stage");
+                    kx2Commands.Add($"Get Destination {destPlate.ID} from Stack");
+                    kx2Commands.Add($"Set Destination {destPlate.ID} to Stage");
                     kx2Commands.Add("Move Safe");
-                    kx2Commands.Add("Get Destination from Stage");
-                    kx2Commands.Add("Set Destination to Stack");
+                    kx2Commands.Add($"Get Destination {destPlate.ID} from Stage");
+                    kx2Commands.Add($"Set Destination {destPlate.ID} to Stack");
                     epsonCommands.Add("Wash " + transferVolume.ToString());
                     epsonCommands.Add("Transfer " + transferVolume.ToString());
                     epsonCommands.Add("Move Safe " + transferVolume.ToString());
                 }
 
-                kx2Commands.Add("Get Source from Stage");
-                kx2Commands.Add("Set Source to Stack");
+                kx2Commands.Add($"Get Source {sourcePlate.ID} from Stage");
+                kx2Commands.Add($"Set Source {sourcePlate.ID} to Stack");
             }
             epsonCommands.Add("Wash " + transferVolume.ToString());
             epsonCommands.Add("Detach " + toolVolumeAttached);
+            kx2Commands.Add("Move Home");
 
             for (int i = 0; i < kx2Commands.Count; i++)
             {

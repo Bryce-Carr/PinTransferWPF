@@ -23,6 +23,8 @@ namespace PinTransferWPF
             set { _LoggingDatabase = value; }
         }
 
+        internal static int numStacks = 6;
+
         // Epson SCARA
         private static string m_spel_ProjectFilePath = "C:\\EpsonRC70\\projects\\PinTransfer\\main\\main.sprj"; // '\' is escape character
         private static double offset = 0;
