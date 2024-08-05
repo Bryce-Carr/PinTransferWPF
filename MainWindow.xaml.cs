@@ -9,7 +9,9 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Documents;
 using Integration;
+using RCAPINet;
 using static Integration.InstrumentEvents;
 using static Integration.RunLogger;
 
@@ -18,6 +20,8 @@ namespace PinTransferWPF
     using StackType = HotelStacker;
     public partial class MainWindow : Window
     {
+        MessageBoxResult messageBoxResult;
+        private InstrumentController InstrumentController;
         private readonly InstrumentEvents _events;
         private JournalParser<StackType> _parser;
         private CommandRunner<StackType> _epsonRunner;
@@ -31,13 +35,16 @@ namespace PinTransferWPF
         public MainWindow()
         {
             InitializeComponent();
+            InstrumentController InstrumentController = new InstrumentController(this);
+            //InstrumentController.InitializeAllDevices();
+
             string connectionString = "Data Source=" + Parameters.LoggingDatabase;
             _events = new InstrumentEvents();
             _numStacks = Parameters.numStacks;
             _stackCapacity = 25; // TODO: replace this with a function that will determine stack capacity if using sequential stackers
             Func<int, StackType> stackerFactory = _stackCapacity => new StackType(_stackCapacity);
             _carousel = new Carousel<StackType>(_numStacks, _stackCapacity, stackerFactory);
-
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
             _runLogger = new RunLogger(connectionString);
             _parser = new JournalParser<StackType>(connectionString, _events, _carousel);
             _epsonRunner = new CommandRunner<StackType>(_parser, "Epson", _runLogger, _events);
@@ -114,6 +121,221 @@ namespace PinTransferWPF
                 StatusScrollViewer.ScrollToVerticalOffset(StatusScrollViewer.ScrollableHeight);
             });
         }
+
+        private void SetupEventHandlersReal()
+        {
+            //TODO add appropriate checks before opening grippers, etc..
+            short ret;
+            int timeout = 0;
+            byte index = 0;
+
+            // Clamps
+            _events.OnClampsStateChanged += async (state, ct) =>
+            {
+                ct.ThrowIfCancellationRequested();
+                AppendStatus($"Clamps {state}");
+                await Task.Run(() =>
+                {
+                    if (state == "open")
+                    {
+                        InstrumentController.m_spel.Call("OpenClamps");
+                    }
+                    else if (state == "close")
+                    {
+                        InstrumentController.m_spel.Call("CloseClamps");
+                    }
+                });                
+            };
+
+            // Epson
+            _events.OnToolAttached += async (toolId, ct) =>
+            {
+                ct.ThrowIfCancellationRequested();
+                AppendStatus($"Attaching {toolId}");
+                await Task.Run(() =>
+                {
+                    switch (toolId)
+                    {
+                        case "33":
+                            InstrumentController.m_spel.Call("AttachSM");
+                            break;
+                        case "100":
+                            InstrumentController.m_spel.Call("AttachMD");
+                            break;
+                        case "300":
+                            InstrumentController.m_spel.Call("AttachLG");
+                            break;
+                        case "96":
+                            InstrumentController.m_spel.Call("Attach96");
+                            break;
+                    }
+                });
+            };
+
+            _events.OnToolDetached += async (toolId, ct) =>
+            {
+                ct.ThrowIfCancellationRequested();
+                AppendStatus($"Detaching {toolId}");
+                await Task.Run(() =>
+                {
+                    switch (toolId)
+                    {
+                        case "33":
+                            InstrumentController.m_spel.Call("DetachSM");
+                            break;
+                        case "100":
+                            InstrumentController.m_spel.Call("DetachMD");
+                            break;
+                        case "300":
+                            InstrumentController.m_spel.Call("DetachLG");
+                            break;
+                        case "96":
+                            InstrumentController.m_spel.Call("Detach96");
+                            break;
+                    }
+                });
+            };
+
+            _events.OnWashCompleted += async (toolId, ct) =>
+            {
+                ct.ThrowIfCancellationRequested();
+                AppendStatus($"Washing {toolId}");
+                await Task.Run(() =>
+                {
+                    switch (toolId)
+                    {
+                        case "33":
+                            InstrumentController.m_spel.Call("WashSM");
+                            break;
+                        case "100":
+                            InstrumentController.m_spel.Call("WashMD");
+                            break;
+                        case "300":
+                            InstrumentController.m_spel.Call("WashLG");
+                            break;
+                        case "96":
+                            InstrumentController.m_spel.Call("Wash96");
+                            break;
+                    }
+                });
+            };
+
+            _events.OnTransferCompleted += async (toolId, ct) =>
+            {
+                ct.ThrowIfCancellationRequested();
+                AppendStatus($"Transfering {toolId}");
+                await Task.Run(() =>
+                {
+                    switch (toolId)
+                    {
+                        case "33":
+                            InstrumentController.m_spel.Call("TransferSM");
+                            break;
+                        case "100":
+                            InstrumentController.m_spel.Call("TransferMD");
+                            break;
+                        case "300":
+                            InstrumentController.m_spel.Call("TransferLG");
+                            break;
+                        case "96":
+                            InstrumentController.m_spel.Call("Transfer96");
+                            break;
+                    }
+                });
+            };
+
+            _events.OnToolSafe += async (toolId, ct) =>
+            {
+                ct.ThrowIfCancellationRequested();
+                AppendStatus($"Safe Move {toolId}");
+                await Task.Run(() =>
+                {
+                    InstrumentController.m_spel.Call("MoveSafe");
+                });
+            };
+
+            //KX2
+            _events.OnArmSafe += async (ct) =>
+            {
+                ct.ThrowIfCancellationRequested();
+                AppendStatus($"Safe Move for Arm");
+                await Task.Run(() =>
+                {
+                    InstrumentController.MovetoTeachPoint("SafeLow");
+                });
+            };
+
+            _events.OnArmHome += async (ct) =>
+            {
+                ct.ThrowIfCancellationRequested();
+                AppendStatus($"Arm homed");
+                await Task.Run(() =>
+                {
+                    InstrumentController.KX2.WarningIdleStartTimeUpdate(); //Suppress warning/buzzer
+                    ret = InstrumentController.KX2.TeachPointMoveTo("Home", Parameters.HomeArmSpeed, Parameters.ArmAccel, true, TimeoutMsec: ref timeout, SendEventWhenMoveDone: false, Index: ref index);
+                    InstrumentController.KX2GetErrorCode(ret);
+                });
+            };
+
+            _events.OnPlateGrabbedFromSequential += async (plateID, ct) =>
+            {
+                ct.ThrowIfCancellationRequested();
+                AppendStatus($"{plateID} grabbed from hotel");
+                await Task.Run(() =>
+                {
+                    // TODO
+                });
+            };
+
+            _events.OnPlateGrabbedFromHotel += async (plateID, location, ct) =>
+            {
+                ct.ThrowIfCancellationRequested();
+                AppendStatus($"{plateID} grabbed from hotel location {location}");
+                await Task.Run(() =>
+                {
+                    InstrumentController.GetPlateFromStack(plateID, (short)_stackCapacity, (short)location);
+                });
+            };
+
+            _events.OnPlateGrabbedFromStage += async (plateID, ct) =>
+            {
+                ct.ThrowIfCancellationRequested();
+                AppendStatus($"{plateID} grabbed from stage");
+                await Task.Run(() =>
+                {
+                    InstrumentController.GetPlateFromStage(plateID);
+                });
+            };
+
+            _events.OnPlatePlacedToStack += async (plateID, location, ct) =>
+            {
+                ct.ThrowIfCancellationRequested();
+                AppendStatus($"{plateID} placed to hotel location {location}");
+                InstrumentController.SetPlateToStack(plateID, (short)_stackCapacity, (short)location);
+            };
+
+            _events.OnPlatePlacedToStage += async (plateID, ct) =>
+            {
+                ct.ThrowIfCancellationRequested();
+                AppendStatus($"{plateID} placed to stage");
+                await Task.Run(() =>
+                {
+                    InstrumentController.SetPlateToStage(plateID);
+                });
+            };
+
+            // Carousel
+            _events.OnCarouselRotated += async (stacker, plateType, ct) =>
+            {
+                ct.ThrowIfCancellationRequested();
+                AppendStatus($"Carousel rotated to {stacker}");
+                await Task.Run(() =>
+                {
+                    InstrumentController.RotateCarousel(stacker, plateType);
+                });
+            };
+        }
+
         private void SetupEventHandlers()
         {
             // Clamps
@@ -219,7 +441,7 @@ namespace PinTransferWPF
             };
 
             // Carousel
-            _events.OnCarouselRotated += async (stacker, ct) =>
+            _events.OnCarouselRotated += async (stacker, plateType, ct) =>
             {
                 ct.ThrowIfCancellationRequested();
                 AppendStatus($"Carousel rotated to {stacker}");
@@ -243,20 +465,42 @@ namespace PinTransferWPF
 
         private void btnCreateRun_Click(object sender, RoutedEventArgs e)
         {
+            int StartingStack;
+            int FinalStack;
+            int StartingPosition;
+            int FinalPosition;
+            //TODO fix sequential logic
             try
             {
                 List<SourcePlate> SourcePlates = new List<SourcePlate>();
                 List<DestinationPlate> DestinationPlates = new List<DestinationPlate>();
                 for (int sourceCount = 1; sourceCount < 3; sourceCount++)
                 {
+                    StartingStack = Math.Abs(sourceCount - 1) / _stackCapacity + 1;
+                    FinalStack = StartingStack;
+                    StartingPosition = sourceCount;
+                    FinalPosition = StartingPosition;
+                    if (typeof(StackType) == typeof(HotelStacker))
+                    {
+                        FinalStack = StartingStack;
+                        FinalPosition = sourceCount;
+                    }
+                    else if (typeof(StackType) == typeof(SequentialStacker))
+                    {
+                        FinalStack = StartingStack * 2;
+                        FinalPosition = sourceCount - ((FinalStack - 1) * _stackCapacity);
+                        if (FinalStack > _numStacks)
+                        {
+                            throw new InvalidOperationException("Too many plates...");
+                        }
+                    }
                     SourcePlates.Add(new SourcePlate
                     {
                         ID = "source_" + sourceCount.ToString(),
-                        Stack = Math.Abs(sourceCount - 1) / _stackCapacity + 1,
-                        FinalStack = Math.Abs(sourceCount - 1) / _stackCapacity + 1,
+                        Stack = StartingStack,
+                        FinalStack = FinalStack,
                         PositionInStack = sourceCount,
-                        // TODO add logic for this for sequential stackers
-                        FinalPositionInStack = sourceCount,
+                        FinalPositionInStack = FinalPosition,
                         Status = new Dictionary<string, bool>()
                         {
                             { "pinned", false }
@@ -268,14 +512,31 @@ namespace PinTransferWPF
                 {
                     for(int replicate = 1; replicate <= sourcePlate.Replicates.Item2; replicate++)
                     {
-                        int stackNum;
+                        StartingStack = _numStacks - ((Math.Abs(DestinationPlates.Count - 1) / _stackCapacity));
+                        FinalStack = StartingStack;
+                        StartingPosition = DestinationPlates.Count() + 1 - ((_numStacks - StartingStack) * _stackCapacity);
+                        FinalPosition = StartingPosition;
+                        if (typeof(StackType) == typeof(HotelStacker))
+                        {
+                            FinalStack = StartingStack;
+                            FinalPosition = StartingPosition;
+                        }
+                        else if (typeof(StackType) == typeof(SequentialStacker))
+                        {
+                            FinalStack = _numStacks - ((Math.Abs(DestinationPlates.Count - 1) / _stackCapacity) * 2);
+                            FinalPosition = DestinationPlates.Count() + 1 - ((_numStacks - FinalStack) * _stackCapacity);
+                            if (FinalStack > _numStacks)
+                            {
+                                throw new InvalidOperationException("Too many plates.");
+                            }
+                        }
                         DestinationPlates.Add(new DestinationPlate
                         {
                             ID = "destination_" + (DestinationPlates.Count() + 1).ToString(),
-                            Stack = stackNum = _numStacks - ((Math.Abs(DestinationPlates.Count - 1) / _stackCapacity)),
-                            FinalStack = stackNum = _numStacks - ((Math.Abs(DestinationPlates.Count - 1) / _stackCapacity)),
-                            PositionInStack = DestinationPlates.Count() + 1 - ((_numStacks - stackNum) * _stackCapacity),
-                            FinalPositionInStack = DestinationPlates.Count() + 1 - ((_numStacks - stackNum) * _stackCapacity),
+                            Stack = StartingStack,
+                            FinalStack = FinalStack,
+                            PositionInStack = StartingPosition,
+                            FinalPositionInStack = FinalPosition,
                             Status = new Dictionary<string, bool>()
                             {
                                 { "pinned", false }
@@ -284,7 +545,7 @@ namespace PinTransferWPF
                         });
                         DestinationPlate plate = DestinationPlates.Find(dp => dp.ID == "destination_" + (DestinationPlates.Count()).ToString());
                         plate.AddSourcePlate(sourcePlate.ID, sourcePlate.Replicates.Item2);
-                }
+                    }
                 }
                 JournalInfo journalInfo = new JournalInfo
                 {
@@ -386,6 +647,11 @@ namespace PinTransferWPF
         private void ResumeButton_Click( object sender, RoutedEventArgs e)
         {
             var lastRunState = _runLogger.LoadRunState("testJournal"); // TODO: Replace with actual journal ID
+            if (!InstrumentController.KX2.IsInitialized())
+            {
+                InstrumentController.InitializeArm();
+            }
+            if (InstrumentController.m_spel.)
             ResumeRun(lastRunState);
         }
         private void CancelButton_Click(object sender, RoutedEventArgs e)
@@ -393,6 +659,8 @@ namespace PinTransferWPF
             _cts?.Cancel();
             CancelButton.IsEnabled = false;
             StatusTextBlock.Text += "Cancelling...";
+
+            InstrumentController.StopAll();
         }
     }
 }

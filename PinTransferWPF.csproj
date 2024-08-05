@@ -141,6 +141,7 @@
       <SubType>Designer</SubType>
     </ApplicationDefinition>
     <Compile Include="Class1.cs" />
+    <Compile Include="InstrumentControl.cs" />
     <Compile Include="JournalExecution.cs" />
     <Compile Include="PinTransfer.cs" />
     <Compile Include="Parameters.cs" />

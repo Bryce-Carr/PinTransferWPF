@@ -85,7 +85,6 @@ namespace Integration
             cancellationToken.ThrowIfCancellationRequested();
             if (OnToolAttached != null)
             {
-                //TODO: what if pause happens here? need to re set all toolid states attached to false..
                 await OnToolAttached(toolId, cancellationToken);
                 SetToolState("any_tool", "attached", true);
                 SetToolState(toolId, "attached", true);
@@ -213,17 +212,16 @@ namespace Integration
         }
 
         public delegate Task CarouselEventHandler(CancellationToken cancellationToken);
-        //TODO standardize this
         public event CarouselEventHandler OnMoved;
 
-        public event Func<int, CancellationToken, Task> OnCarouselRotated;
+        public event Func<int, string, CancellationToken, Task> OnCarouselRotated;
         public event Func<string, int, int, CancellationToken, Task> OnPlatePlacedInStacker;
         public event Func<string, int, int, CancellationToken, Task> OnPlateRemovedFromStacker;
 
-        internal async Task RaiseCarouselRotated(int position, CancellationToken ct)
+        internal async Task RaiseCarouselRotated(int position, string plateType, CancellationToken ct)
         {
             if (OnCarouselRotated != null)
-                await OnCarouselRotated(position, ct);
+                await OnCarouselRotated(position, plateType, ct);
                 SetCarouselState("safe", true);
         }
 
@@ -529,7 +527,6 @@ namespace Integration
 
         public void ResetEvents()
         {
-            //TODO change this to read run state (that has been initialized with the below states)
             // Sets all states according to a fresh, ready-to-run pin transfer configuration
             _toolStates.Clear();
             _armStates.Clear();
@@ -564,7 +561,6 @@ namespace Integration
             SetToolState("300", "transferred", false);
 
             SetStageState("source", "present", false);
-            // TODO: source transferred? need to change journal to mark # of transfers
             SetStageState("destination", "present", false);
             SetStageState("destination", "lidded", false);
             SetStageState("destination", "transferred", false);
@@ -674,13 +670,16 @@ namespace Integration
             }
             else if (commandString.StartsWith("Transfer"))
             {
+                await _events.RaiseClampsStateChanged("closed", ct);
                 await Task.WhenAll(
                     _events.WaitForToolState(toolId, "washed", true, ct),
                     _events.WaitForArmState("safe", true, ct),
                     _events.WaitForStageState("destination", "transferred", false, ct)
                 );
+                await _events.WaitForArmState("clamps_open", false, ct);
 
                 await _events.RaiseTransferCompleted(toolId, ct);
+                await _events.RaiseClampsStateChanged("open", ct);
             }
             else if (commandString.StartsWith("Move Safe"))
             {
@@ -750,7 +749,7 @@ namespace Integration
                 (int stackerIndex, int platePosition) plateLocation = _carousel.GetPlateLocation(plateID);
                 if (_carousel.CurrentPosition != plateLocation.stackerIndex)
                 {
-                    await _events.RaiseCarouselRotated(plateLocation.stackerIndex, ct);
+                    await _events.RaiseCarouselRotated(plateLocation.stackerIndex, plateType, ct);
                     _carousel.RotateToPosition(plateLocation.stackerIndex);
                 }
                 else
@@ -803,7 +802,7 @@ namespace Integration
 
                 if (_carousel.CurrentPosition != plateLocation.stackerIndex)
                 {
-                    await _events.RaiseCarouselRotated(plateLocation.stackerIndex, ct);
+                    await _events.RaiseCarouselRotated(plateLocation.stackerIndex, plateType, ct);
                     _carousel.RotateToPosition(plateLocation.stackerIndex);
                 }
                 else
@@ -817,8 +816,6 @@ namespace Integration
                 );
                 // Last task to wait for
                 await _events.WaitForCarouselState("safe", true, ct);
-
-                //TODO add logic for finding final position for plate (sequential)
 
                 await _events.RaisePlatePlacedToStack(plateID, plateLocation.platePosition, ct);
             }
