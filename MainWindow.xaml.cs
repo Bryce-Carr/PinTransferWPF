@@ -35,8 +35,8 @@ namespace PinTransferWPF
         public MainWindow()
         {
             InitializeComponent();
-            InstrumentController InstrumentController = new InstrumentController(this);
-            //InstrumentController.InitializeAllDevices();
+            InstrumentController = new InstrumentController(this);
+            InstrumentController.InitializeAllDevices();
 
             string connectionString = "Data Source=" + Parameters.LoggingDatabase;
             _events = new InstrumentEvents();
@@ -122,7 +122,7 @@ namespace PinTransferWPF
             });
         }
 
-        private void SetupEventHandlersReal()
+        private void SetupEventHandlers()
         {
             //TODO add appropriate checks before opening grippers, etc..
             short ret;
@@ -336,7 +336,7 @@ namespace PinTransferWPF
             };
         }
 
-        private void SetupEventHandlers()
+        private void SetupEventHandlersText()
         {
             // Clamps
             _events.OnClampsStateChanged += async (state, ct) =>
@@ -644,16 +644,19 @@ namespace PinTransferWPF
             }
         }
 
-        private void ResumeButton_Click( object sender, RoutedEventArgs e)
+        private async void ResumeButton_Click( object sender, RoutedEventArgs e)
         {
             var lastRunState = _runLogger.LoadRunState("testJournal"); // TODO: Replace with actual journal ID
             if (!InstrumentController.KX2.IsInitialized())
             {
-                InstrumentController.InitializeArm();
+                await Task.Run(() =>
+                {
+                    InstrumentController.InitializeArm();
+                });
             }
-            if (InstrumentController.m_spel.)
             ResumeRun(lastRunState);
         }
+
         private void CancelButton_Click(object sender, RoutedEventArgs e)
         {
             _cts?.Cancel();
