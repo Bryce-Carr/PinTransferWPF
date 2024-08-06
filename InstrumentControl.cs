@@ -68,6 +68,8 @@ namespace Integration
             await Task.Run(async () =>
             {
                 Task initializeSpel = InitializeSpelAsync();
+                // ensure Epson Motors are on 
+                if (!m_spel.MotorsOn) { m_spel.MotorsOn = true; }
                 Task initializeKX2 = InitializeKX2Async();
                 Task initializeCS = InitializeCSAsync();
 
