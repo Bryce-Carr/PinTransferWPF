@@ -355,9 +355,11 @@ namespace Integration
             CS6GetErrorCode((short)ret);
         }
 
-        internal void StopAll()
+        internal async void StopAll()
         {
+            // TODO do these at same time async
             m_spel.Stop(SpelStopType.StopAllTasks); // stops all Epson
+            m_spel.ResetAbort();
             AllRelaysOff(); // turn off all I/O devices
             KX2.EmergencyStop(); // stops Arm
             StopCS(); // stops carousel

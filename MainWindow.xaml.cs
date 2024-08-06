@@ -36,7 +36,10 @@ namespace PinTransferWPF
         {
             InitializeComponent();
             InstrumentController = new InstrumentController(this);
-            InstrumentController.InitializeAllDevices();
+            if (Parameters.UsingInstruments)
+            {
+                InstrumentController.InitializeAllDevices();
+            }
 
             string connectionString = "Data Source=" + Parameters.LoggingDatabase;
             _events = new InstrumentEvents();
@@ -202,20 +205,27 @@ namespace PinTransferWPF
                 AppendStatus($"Washing {toolId}");
                 await Task.Run(() =>
                 {
-                    switch (toolId)
+                    if (Parameters.Testing)
                     {
-                        case "33":
-                            InstrumentController.m_spel.Call("WashSM");
-                            break;
-                        case "100":
-                            InstrumentController.m_spel.Call("WashMD");
-                            break;
-                        case "300":
-                            InstrumentController.m_spel.Call("WashLG");
-                            break;
-                        case "96":
-                            InstrumentController.m_spel.Call("Wash96");
-                            break;
+                        InstrumentController.m_spel.Call("WashFake");
+                    }
+                    else
+                    {
+                        switch (toolId)
+                        {
+                            case "33":
+                                InstrumentController.m_spel.Call("WashSM");
+                                break;
+                            case "100":
+                                InstrumentController.m_spel.Call("WashMD");
+                                break;
+                            case "300":
+                                InstrumentController.m_spel.Call("WashLG");
+                                break;
+                            case "96":
+                                InstrumentController.m_spel.Call("Wash96");
+                                break;
+                        }
                     }
                 });
             };
@@ -647,14 +657,17 @@ namespace PinTransferWPF
         private async void ResumeButton_Click( object sender, RoutedEventArgs e)
         {
             var lastRunState = _runLogger.LoadRunState("testJournal"); // TODO: Replace with actual journal ID
-            if (!InstrumentController.KX2.IsInitialized())
+            if (Parameters.UsingInstruments)
             {
-                await Task.Run(() =>
+                if (!InstrumentController.KX2.IsInitialized())
                 {
-                    InstrumentController.InitializeArm();
-                });
+                    await Task.Run(() =>
+                    {
+                        InstrumentController.InitializeArm();
+                    });
+                }
+                ResumeRun(lastRunState);
             }
-            ResumeRun(lastRunState);
         }
 
         private void CancelButton_Click(object sender, RoutedEventArgs e)
@@ -663,7 +676,10 @@ namespace PinTransferWPF
             CancelButton.IsEnabled = false;
             StatusTextBlock.Text += "Cancelling...";
 
-            InstrumentController.StopAll();
+            if (Parameters.UsingInstruments)
+            {
+                InstrumentController.StopAll();
+            }
         }
     }
 }

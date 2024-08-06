@@ -8,6 +8,10 @@ namespace Integration
 {
     internal static class Parameters
     {
+        // For testing/debugging
+        internal static bool Testing = true;
+        internal static bool UsingInstruments = true;
+
         // Databases
         internal static string _LabwareDatabase = "labware.db";
         internal static string LabwareDatabase 
