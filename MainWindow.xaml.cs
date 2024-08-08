@@ -2,6 +2,7 @@
 using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.ComponentModel.Design;
 using System.Linq;
 using System.Text.Json;
@@ -39,7 +40,15 @@ namespace PinTransferWPF
             if (Parameters.UsingInstruments)
             {
                 InstrumentController.InitializeAllDevices();
+
+                this.Closing += new CancelEventHandler(MainWindow_Closing);
+
+                void MainWindow_Closing(object sender, CancelEventArgs e)
+                {
+                    InstrumentController.OnShutdown();
+                }
             }
+
 
             string connectionString = "Data Source=" + Parameters.LoggingDatabase;
             _events = new InstrumentEvents();
@@ -52,8 +61,14 @@ namespace PinTransferWPF
             _parser = new JournalParser<StackType>(connectionString, _events, _carousel);
             _epsonRunner = new CommandRunner<StackType>(_parser, "Epson", _runLogger, _events);
             _kx2Runner = new CommandRunner<StackType>(_parser, "KX2", _runLogger, _events);
-
-            SetupEventHandlers();
+            if (Parameters.UsingInstruments)
+            {
+                SetupEventHandlers();
+            }
+            else
+            {
+                SetupEventHandlersText();
+            }
             CheckForUnfinishedRun(connectionString);
         }
 
@@ -81,6 +96,7 @@ namespace PinTransferWPF
             List<Plate> deserializedPlates = PlateSerializer.DeserializePlates(serializedPlates);
             PopulateCarousel(deserializedPlates);
             _events._plates = deserializedPlates;
+            _events.ResumeLine = runState.ResumeLine;
 
             RunCommandsButton.IsEnabled = false;
             CancelButton.IsEnabled = true;
@@ -131,7 +147,8 @@ namespace PinTransferWPF
             short ret;
             int timeout = 0;
             byte index = 0;
-
+            short errorCode = 0;
+            short resumeLine = 0;
             // Clamps
             _events.OnClampsStateChanged += async (state, ct) =>
             {
@@ -283,7 +300,6 @@ namespace PinTransferWPF
                 {
                     InstrumentController.KX2.WarningIdleStartTimeUpdate(); //Suppress warning/buzzer
                     ret = InstrumentController.KX2.TeachPointMoveTo("Home", Parameters.HomeArmSpeed, Parameters.ArmAccel, true, TimeoutMsec: ref timeout, SendEventWhenMoveDone: false, Index: ref index);
-                    InstrumentController.KX2GetErrorCode(ret);
                 });
             };
 
@@ -303,7 +319,18 @@ namespace PinTransferWPF
                 AppendStatus($"{plateID} grabbed from hotel location {location}");
                 await Task.Run(() =>
                 {
-                    InstrumentController.GetPlateFromStack(plateID, (short)_stackCapacity, (short)location);
+                    if (_events.ResumeLine == 0)
+                    {
+                        errorCode = InstrumentController.GetPlateFromStack(plateID, (short)_stackCapacity, (short)location);
+                    }
+                    else
+                    {
+                        errorCode = InstrumentController.GetPlateFromStack(plateID, (short)_stackCapacity, (short)location, resumeLine);
+                    }
+                    if (errorCode == 2)
+                    {
+                        Int32.TryParse(InstrumentController.KX2.GetErrorCode(2), out _events.ResumeLine);
+                    }
                 });
             };
 
@@ -313,7 +340,18 @@ namespace PinTransferWPF
                 AppendStatus($"{plateID} grabbed from stage");
                 await Task.Run(() =>
                 {
-                    InstrumentController.GetPlateFromStage(plateID);
+                    if (_events.ResumeLine == 0)
+                    {
+                        errorCode = InstrumentController.GetPlateFromStage(plateID);
+                    }
+                    else
+                    {
+                        errorCode = InstrumentController.GetPlateFromStage(plateID, resumeLine);
+                    }
+                    if (errorCode == 2)
+                    {
+                        Int32.TryParse(InstrumentController.KX2.GetErrorCode(2), out _events.ResumeLine);
+                    }
                 });
             };
 
@@ -321,7 +359,21 @@ namespace PinTransferWPF
             {
                 ct.ThrowIfCancellationRequested();
                 AppendStatus($"{plateID} placed to hotel location {location}");
-                InstrumentController.SetPlateToStack(plateID, (short)_stackCapacity, (short)location);
+                await Task.Run(() =>
+                {
+                    if ( _events.ResumeLine == 0)
+                    {
+                        errorCode = InstrumentController.SetPlateToStack(plateID, (short)_stackCapacity, (short)location);
+                    }
+                    else
+                    {
+                        errorCode = InstrumentController.SetPlateToStack(plateID, (short)_stackCapacity, (short)location, resumeLine);
+                    }
+                    if (errorCode == 2)
+                    {
+                        Int32.TryParse(InstrumentController.KX2.GetErrorCode(2), out _events.ResumeLine);
+                    }
+                });
             };
 
             _events.OnPlatePlacedToStage += async (plateID, ct) =>
@@ -330,7 +382,18 @@ namespace PinTransferWPF
                 AppendStatus($"{plateID} placed to stage");
                 await Task.Run(() =>
                 {
-                    InstrumentController.SetPlateToStage(plateID);
+                    if (_events.ResumeLine == 0)
+                    {
+                        errorCode = InstrumentController.SetPlateToStage(plateID);
+                    }
+                    else
+                    {
+                        errorCode = InstrumentController.SetPlateToStage(plateID, resumeLine);
+                    }
+                    if (errorCode == 2)
+                    {
+                        Int32.TryParse(InstrumentController.KX2.GetErrorCode(2), out _events.ResumeLine);
+                    }
                 });
             };
 
@@ -666,8 +729,8 @@ namespace PinTransferWPF
                         InstrumentController.InitializeArm();
                     });
                 }
-                ResumeRun(lastRunState);
             }
+            ResumeRun(lastRunState);
         }
 
         private void CancelButton_Click(object sender, RoutedEventArgs e)

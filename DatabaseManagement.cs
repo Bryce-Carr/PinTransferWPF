@@ -217,6 +217,7 @@ namespace Integration
         public DateTime LastUpdated { get; set; }
         public int Completed { get; set; }
         public int CarouselPosition { get; set; }
+        public int ResumeLine {  get; set; }
 
         public RunState()
         {
@@ -308,7 +309,8 @@ namespace Integration
                                 Plates = reader.GetString(7),
                                 InitialPlates = reader.GetString(8),
                                 LastUpdated = DateTime.Parse(reader.GetString(9)),
-                                Completed = reader.GetInt32(10)
+                                Completed = reader.GetInt32(10),
+                                ResumeLine = reader.GetInt32(11)
                             };
                         }
                     }
@@ -342,6 +344,7 @@ namespace Integration
                                 InitialPlates = reader["InitialPlates"].ToString(),
                                 LastUpdated = DateTime.Parse(reader["LastUpdated"].ToString()),
                                 Completed = Convert.ToInt32(reader["Completed"]),
+                                ResumeLine = Convert.ToInt32(reader["ResumeLine"]),
                             };
                         }
                         // If no existing state is found, return a new RunState with default values
@@ -357,7 +360,8 @@ namespace Integration
                             Plates = "",
                             InitialPlates = "",
                             LastUpdated = DateTime.UtcNow,
-                            Completed = 0
+                            Completed = 0,
+                            ResumeLine = 0
                         };
                     }
                 }
@@ -412,7 +416,8 @@ namespace Integration
                                                 Plates TEXT NOT NULL,
                                                 InitialPlates TEXT NOT NULL,
                                                 LastUpdated TEXT NOT NULL,
-                                                Completed INTEGER NOT NULL)", connection))
+                                                Completed INTEGER NOT NULL,
+                                                ResumeLine INTEGER NOT NULL)", connection))
                 {
                     command.ExecuteNonQuery();
                 }
@@ -435,14 +440,15 @@ namespace Integration
                                                 Plates TEXT NOT NULL,
                                                 InitialPlates TEXT NOT NULL,
                                                 LastUpdated TEXT NOT NULL,
-                                                Completed INTEGER NOT NULL)", connection))
+                                                Completed INTEGER NOT NULL,
+                                                ResumeLine INTEGER NOT NULL)", connection))
                 {
                     command.ExecuteNonQuery();
                 }
 
                 using (var command = new SQLiteCommand(@"INSERT OR REPLACE INTO RunState 
-                (JournalID, EpsonCommandID, KX2CommandID, SerializedToolStates, SerializedArmStates, SerializedStageStates, SerializedCarouselStates, Plates, InitialPlates, LastUpdated, Completed)
-                VALUES (@JournalID, @EpsonCommandID, @KX2CommandID, @SerializedToolStates, @SerializedArmStates, @SerializedStageStates, @SerializedCarouselStates, @Plates, @InitialPlates, @LastUpdated, @Completed)", connection))
+                (JournalID, EpsonCommandID, KX2CommandID, SerializedToolStates, SerializedArmStates, SerializedStageStates, SerializedCarouselStates, Plates, InitialPlates, LastUpdated, Completed, ResumeLine)
+                VALUES (@JournalID, @EpsonCommandID, @KX2CommandID, @SerializedToolStates, @SerializedArmStates, @SerializedStageStates, @SerializedCarouselStates, @Plates, @InitialPlates, @LastUpdated, @Completed, @ResumeLine)", connection))
                 {
                     command.Parameters.AddWithValue("@JournalID", state.JournalID);
                     command.Parameters.AddWithValue("@EpsonCommandID", state.EpsonCommandID);
@@ -455,6 +461,7 @@ namespace Integration
                     command.Parameters.AddWithValue("@InitialPlates", state.InitialPlates);
                     command.Parameters.AddWithValue("@LastUpdated", state.LastUpdated.ToString("O"));
                     command.Parameters.AddWithValue("@Completed", state.Completed);
+                    command.Parameters.AddWithValue("@ResumeLine", state.ResumeLine);
                     command.ExecuteNonQuery();
                 }
             }
@@ -476,7 +483,8 @@ namespace Integration
                                                 Plates TEXT NOT NULL,
                                                 InitialPlates TEXT NOT NULL,
                                                 LastUpdated TEXT NOT NULL,
-                                                Completed INTEGER NOT NULL)", connection))
+                                                Completed INTEGER NOT NULL,
+                                                ResumeLine INTEGER NOT NULL)", connection))
                 {
                     command.ExecuteNonQuery();
                 }
@@ -500,6 +508,7 @@ namespace Integration
                                 InitialPlates = reader.GetString(8),
                                 LastUpdated = DateTime.Parse(reader.GetString(9)),
                                 Completed = reader.GetInt32(10),
+                                ResumeLine = reader.GetInt32(11),
                             };
                         }
                     }

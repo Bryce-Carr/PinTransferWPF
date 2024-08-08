@@ -65,18 +65,13 @@ namespace Integration
 
         internal async void InitializeAllDevices()
         {
-            await Task.Run(async () =>
-            {
-                Task initializeSpel = InitializeSpelAsync();
-                // ensure Epson Motors are on 
-                if (!m_spel.MotorsOn) { m_spel.MotorsOn = true; }
-                Task initializeKX2 = InitializeKX2Async();
-                Task initializeCS = InitializeCSAsync();
+            Task initializeSpel = InitializeSpelAsync();
+            // ensure Epson Motors are on 
+            if (!m_spel.MotorsOn) { m_spel.MotorsOn = true; }
+            Task initializeKX2 = InitializeKX2Async();
+            Task initializeCS = InitializeCSAsync();
 
-                await Task.WhenAll(initializeSpel, initializeKX2, initializeCS);
-            });
-
-
+            await Task.WhenAll(initializeSpel, initializeKX2, initializeCS);
         }
 
         internal async Task InitializeSpelAsync()
@@ -99,16 +94,21 @@ namespace Integration
         }
 
         //  interpret KX2 error codes
-        internal void KX2GetErrorCode(short ret)
+        internal void HandleKX2ErrorCode(short ret)
         {
-            if (ret != 0) { MessageBox.Show(_owner, KX2.GetErrorCode(ret)); }
+            //if (ret == 2)
+            //{
+            //    string resumeLine = KX2.GetErrorCode(ret);
+
+            //}
+            //if (ret != 0) { MessageBox.Show(_owner, KX2.GetErrorCode(ret)); }
         }
 
         internal void InitializeArm()
         {
             short ret;
             ret = KX2.Initialize();
-            KX2GetErrorCode(ret);
+            HandleKX2ErrorCode(ret);
         }
 
         internal async Task InitializeKX2Async()
@@ -123,7 +123,7 @@ namespace Integration
         //  interprets Carousel error codes
         internal void CS6GetErrorCode(short ret)
         {
-            if (ret != 0) { MessageBox.Show(_owner, CS6.GetErrorCode(ret)); }
+            //if (ret != 0) { MessageBox.Show(_owner, CS6.GetErrorCode(ret)); }
         }
 
         //  initialize CS
@@ -209,7 +209,7 @@ namespace Integration
                 KX2.EmergencyStop(); // stop robot arm
             }
 
-            MessageBox.Show(_owner, "recieved event" + e.Event);
+            //MessageBox.Show(_owner, "recieved event" + e.Event);
 
         }
         internal void MovetoTeachPoint(string tp)
@@ -219,7 +219,7 @@ namespace Integration
             KX2.TeachPointMoveTo(tp, Parameters.ArmSpeed, Parameters.ArmAccel, true, TimeoutMsec: ref Timeout, false, Index: ref Index);
         }
 
-        internal void GetPlateFromStage(string plateID)
+        internal short GetPlateFromStage(string plateID)
         {
             short ret;
 
@@ -235,10 +235,31 @@ namespace Integration
             {
                 throw new InvalidOperationException("Plate has to be source or destination");
             }
-            KX2GetErrorCode(ret);
+            HandleKX2ErrorCode(ret);
+            return ret;
         }
 
-        internal void SetPlateToStage(string plateID)
+        internal short GetPlateFromStage(string plateID, short resumeLine)
+        {
+            short ret;
+
+            if (plateID.Contains("source"))
+            {
+                ret = KX2.ScriptResume("", "GetStageSourcePlate", resumeLine, true);
+            }
+            else if (plateID.Contains("destination"))
+            {
+                ret = KX2.ScriptResume("", "GetStageDestPlate", resumeLine, true);
+            }
+            else
+            {
+                throw new InvalidOperationException("Plate has to be source or destination");
+            }
+            HandleKX2ErrorCode(ret);
+            return ret;
+        }
+
+        internal short SetPlateToStage(string plateID)
         {
             short ret;
             
@@ -254,10 +275,30 @@ namespace Integration
             {
                 throw new InvalidOperationException("Plate has to be source or destination");
             }
-            KX2GetErrorCode(ret);
+            HandleKX2ErrorCode(ret);
+            return ret;
+        }
+        internal short SetPlateToStage(string plateID, short resumeLine)
+        {
+            short ret;
+
+            if (plateID.Contains("source"))
+            {
+                ret = KX2.ScriptResume("", "PutStageSourcePlate", resumeLine, true);
+            }
+            else if (plateID.Contains("destination"))
+            {
+                ret = KX2.ScriptResume("", "PutStageDestPlate", resumeLine, true);
+            }
+            else
+            {
+                throw new InvalidOperationException("Plate has to be source or destination");
+            }
+            HandleKX2ErrorCode(ret);
+            return ret;
         }
 
-        internal void GetPlateFromStack(string plateID, short stackCapacity, short location)
+        internal short GetPlateFromStack(string plateID, short stackCapacity, short location)
         {
             short ret;
             KX2.SetMovePathMode(KX2RobotControlNamespace.KX2RobotControl.eMovePathMode.Linear);
@@ -279,12 +320,41 @@ namespace Integration
             {
                 throw new InvalidOperationException("Plate has to be source or destination");
             }
-            KX2GetErrorCode(ret);
+            HandleKX2ErrorCode(ret);
 
             KX2.SetMovePathMode(KX2RobotControlNamespace.KX2RobotControl.eMovePathMode.Joint);
+            return ret;
+        }
+        internal short GetPlateFromStack(string plateID, short stackCapacity, short location, short resumeLine)
+        {
+            short ret;
+            KX2.SetMovePathMode(KX2RobotControlNamespace.KX2RobotControl.eMovePathMode.Linear);
+            //ret = KX2.RemovePlateFromHotel(TopTeachpoint, BottomTeachpoint, RetractTeachpoint, HotelCapacity, GetPlateSelfLocation(plate), GripperLiftHeight, ArmSpeed, GripperTimeDelay, true, 0, 0, Waypoint, true, true);
+
+            if (plateID.Contains("source"))
+            {
+                ret = KX2.RemovePlateFromHotelResume(resumeLine, Parameters.TopTeachpointSource, Parameters.BottomTeachpointSource,
+                    Parameters.RetractTeachpointSource, stackCapacity, location,
+                    Parameters.GripperLiftHeight, Parameters.ArmSpeed, Parameters.GripperTimeDelay, true);
+            }
+            else if (plateID.Contains("destination"))
+            {
+                ret = KX2.RemovePlateFromHotelResume(resumeLine, Parameters.TopTeachpointDestination, Parameters.BottomTeachpointDestination,
+                                    Parameters.RetractTeachpointDestination, stackCapacity, location,
+                                    Parameters.GripperLiftHeight, Parameters.ArmSpeed, Parameters.GripperTimeDelay, true);
+            }
+            else
+            {
+                throw new InvalidOperationException("Plate has to be source or destination");
+            }
+
+            HandleKX2ErrorCode(ret);
+
+            KX2.SetMovePathMode(KX2RobotControlNamespace.KX2RobotControl.eMovePathMode.Joint);
+            return ret;
         }
 
-        internal void SetPlateToStack(string plateID, short stackCapacity, short location)
+        internal short SetPlateToStack(string plateID, short stackCapacity, short location)
         {
             short ret;
             KX2.SetMovePathMode(KX2RobotControlNamespace.KX2RobotControl.eMovePathMode.Linear);
@@ -308,9 +378,37 @@ namespace Integration
                 throw new InvalidOperationException("Plate has to be source or destination");
             }
 
-            KX2GetErrorCode(ret);
+            HandleKX2ErrorCode(ret);
             // set movepathmode back to joint to avoid interpolation errors
             KX2.SetMovePathMode(KX2RobotControlNamespace.KX2RobotControl.eMovePathMode.Joint);
+            return ret;
+        }
+        internal short SetPlateToStack(string plateID, short stackCapacity, short location, int resumeLine)
+        {
+            short ret;
+            KX2.SetMovePathMode(KX2RobotControlNamespace.KX2RobotControl.eMovePathMode.Linear);
+
+            if (plateID.Contains("source"))
+            {
+                ret = KX2.PlacePlateInHotelResume(resumeLine, Parameters.TopTeachpointSource, Parameters.BottomTeachpointSource,
+                    Parameters.RetractTeachpointSource, stackCapacity, location, Parameters.GripperLiftHeight,
+                    Parameters.ArmSpeed, Parameters.GripperTimeDelay, true);
+            }
+            else if (plateID.Contains("destination"))
+            {
+                ret = KX2.PlacePlateInHotelResume(resumeLine, Parameters.TopTeachpointDestination, Parameters.BottomTeachpointDestination,
+                    Parameters.RetractTeachpointDestination, stackCapacity, location, Parameters.GripperLiftHeight,
+                    Parameters.ArmSpeed, Parameters.GripperTimeDelay, true);
+            }
+            else
+            {
+                throw new InvalidOperationException("Plate has to be source or destination");
+            }
+
+            HandleKX2ErrorCode(ret);
+            // set movepathmode back to joint to avoid interpolation errors
+            KX2.SetMovePathMode(KX2RobotControlNamespace.KX2RobotControl.eMovePathMode.Joint);
+            return ret;
         }
 
         internal void RotateCarousel(int stackNum, string plateType)
@@ -362,9 +460,44 @@ namespace Integration
             // TODO do these at same time async
             m_spel.Stop(SpelStopType.StopAllTasks); // stops all Epson
             m_spel.ResetAbort();
-            AllRelaysOff(); // turn off all I/O devices
+            //AllRelaysOff(); // turn off all I/O devices
             KX2.EmergencyStop(); // stops Arm
             StopCS(); // stops carousel
+        }
+
+        internal void OnShutdown()
+        {
+            if (m_spel != null)
+            {
+                AllRelaysOff(); // turn off all I/O devices 
+
+                // unsubscribe from m_spel events to prevent memory leaks
+                m_spel.EventReceived -= new RCAPINet.Spel.EventReceivedEventHandler(m_spel_EventReceived);
+
+                // When your application exits, you need to execute Dispose for each Spel class instance. 
+                // This can be done in your main form's FormClosed event. If Dispose is not executed, 
+                // the application will not shutdown properly
+
+
+                m_spel.Dispose();
+            }
+
+            if (KX2 != null)
+            {
+                // Shutdown KX2
+                KX2.ShutDown();
+
+                // Call this method just prior to closing the connection to the DLL to allow 
+                // the DLL to close all forms and to terminate all classes.If this method is
+                // not used, a memory-write error may occur.
+                KX2.PreClassTerminateCleanup();
+            }
+
+            if (CS6 != null)
+            {
+                // shutdown carousel
+                CS6 = null;
+            }
         }
     }
 }

@@ -10,7 +10,7 @@ namespace Integration
     {
         // For testing/debugging
         internal static bool Testing = true;
-        internal static bool UsingInstruments = true;
+        internal static bool UsingInstruments = false;
 
         // Databases
         internal static string _LabwareDatabase = "labware.db";
@@ -54,8 +54,8 @@ namespace Integration
         // KX2 Gripper
         internal static double GripperOpenPos = 6; // 9/1/23 new gripper new open value 
         internal static double GripperSpeed = 100; // gripper motor speed; 
-        internal static double GripperLiftHeight = 1; // Lift height when grapping a plate from shelf
-        internal static int GripperTimeDelay = 10; // indicated in msecs; not needed with servo gripper
+        internal static double GripperLiftHeight = 6; // Lift height when grapping a plate from shelf
+        internal static int GripperTimeDelay = 0; // indicated in msecs; not needed with servo gripper
 
         // Carousel
         internal static string CarouselParameterFile =

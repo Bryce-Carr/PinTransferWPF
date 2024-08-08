@@ -72,6 +72,7 @@ namespace Integration
 
     public class InstrumentEvents
     {
+        public int ResumeLine = 0; // For when arm movement gets stopped in the middle of grabbing/setting to hotel or running a script
         public delegate Task EpsonEventHandler(string toolId, CancellationToken cancellationToken);
 
         public event EpsonEventHandler OnToolAttached;
@@ -220,21 +221,27 @@ namespace Integration
 
         internal async Task RaiseCarouselRotated(int position, string plateType, CancellationToken ct)
         {
-            if (OnCarouselRotated != null)
+            ct.ThrowIfCancellationRequested();
+            if (OnCarouselRotated != null){
                 await OnCarouselRotated(position, plateType, ct);
                 SetCarouselState("safe", true);
+            }
         }
 
         internal async Task RaisePlatePlacedInStacker(string plateId, int stackerIndex, int position, CancellationToken ct)
         {
-            if (OnPlatePlacedInStacker != null)
+            ct.ThrowIfCancellationRequested();
+            if (OnPlatePlacedInStacker != null){
                 await OnPlatePlacedInStacker(plateId, stackerIndex, position, ct);
+            }
         }
 
         internal async Task RaisePlateRemovedFromStacker(string plateId, int stackerIndex, int position, CancellationToken ct)
         {
-            if (OnPlateRemovedFromStacker != null)
+            ct.ThrowIfCancellationRequested();
+            if (OnPlateRemovedFromStacker != null){
                 await OnPlateRemovedFromStacker(plateId, stackerIndex, position, ct);
+            }
         }
          
         // Clamps
@@ -242,8 +249,10 @@ namespace Integration
 
         internal async Task RaiseClampsStateChanged(string state, CancellationToken ct)
         {
-            if (OnClampsStateChanged != null)
+            ct.ThrowIfCancellationRequested();
+            if (OnClampsStateChanged != null){
                 await OnClampsStateChanged(state, ct);
+            }
             switch (state)
             {
                 case "open":
@@ -642,6 +651,7 @@ namespace Integration
 
             if (commandString.StartsWith("Attach"))
             {
+                await _events.RaiseClampsStateChanged("open", ct);
                 await Task.WhenAll(
                     _events.WaitForToolState("33", "attached", false, ct),
                     _events.WaitForToolState("100", "attached", false, ct),
@@ -670,12 +680,13 @@ namespace Integration
             }
             else if (commandString.StartsWith("Transfer"))
             {
-                await _events.RaiseClampsStateChanged("closed", ct);
                 await Task.WhenAll(
                     _events.WaitForToolState(toolId, "washed", true, ct),
-                    _events.WaitForArmState("safe", true, ct),
-                    _events.WaitForStageState("destination", "transferred", false, ct)
+                    _events.WaitForArmState("safe", true, ct)
                 );
+                // await order matters
+                await _events.RaiseClampsStateChanged("close", ct);
+                await _events.WaitForStageState("destination", "transferred", false, ct);
                 await _events.WaitForArmState("clamps_open", false, ct);
 
                 await _events.RaiseTransferCompleted(toolId, ct);
@@ -914,6 +925,7 @@ namespace Integration
                 // assumption that SaveRunState will be called before first time running a journal so that InitialPlates will be initialized because I can't think of a more elegant way to do this..
                 //InitialPlates = currentState.InitialPlates.Equals("") ? PlateSerializer.SerializePlates(_events._plates) : currentState.InitialPlates, 
                 InitialPlates = currentState.InitialPlates.Equals("") ? PlateSerializer.SerializePlates(_events._plates) : currentState.InitialPlates,
+                ResumeLine = _events.ResumeLine,
             };
 
             _runLogger.SaveRunState(runState);
