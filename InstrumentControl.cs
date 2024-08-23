@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Documents;
+using System.Windows.Input;
 using RCAPINet;
 
 namespace Integration
@@ -107,6 +108,7 @@ namespace Integration
         internal void InitializeArm()
         {
             short ret;
+            KX2.UseDefaultGripperState(false);
             ret = KX2.Initialize();
             HandleKX2ErrorCode(ret);
         }
@@ -301,20 +303,47 @@ namespace Integration
         internal short GetPlateFromStack(string plateID, short stackCapacity, short location)
         {
             short ret;
+
             KX2.SetMovePathMode(KX2RobotControlNamespace.KX2RobotControl.eMovePathMode.Linear);
-            //ret = KX2.RemovePlateFromHotel(TopTeachpoint, BottomTeachpoint, RetractTeachpoint, HotelCapacity, GetPlateSelfLocation(plate), GripperLiftHeight, ArmSpeed, GripperTimeDelay, true, 0, 0, Waypoint, true, true);
 
             if (plateID.Contains("source"))
             {
+                string teachPoint = "Home";
+                // Get arm position; if at SafeLow, move to Away_Far before going to destination stacker
+                // Arm cannot move directly to destination stacker from SafeLow
+                short armPosition = KX2.DetermineTeachPoint(TeachPoint: ref teachPoint, null);
+                if (armPosition == 0)
+                {
+                    KX2.SetMovePathMode(KX2RobotControlNamespace.KX2RobotControl.eMovePathMode.Joint);
+                    MovetoTeachPoint("SourceSafe");
+                }
+
+                KX2.SetMovePathMode(KX2RobotControlNamespace.KX2RobotControl.eMovePathMode.Linear);
                 ret = KX2.RemovePlateFromHotel(Parameters.TopTeachpointSource, Parameters.BottomTeachpointSource,
                     Parameters.RetractTeachpointSource, stackCapacity, location,
                     Parameters.GripperLiftHeight, Parameters.ArmSpeed, Parameters.GripperTimeDelay, true);
+                KX2.SetMovePathMode(KX2RobotControlNamespace.KX2RobotControl.eMovePathMode.Joint);
             }
             else if (plateID.Contains("destination"))
             {
+                string teachPoint = "SafeLow";
+                // Get arm position; if at SafeLow, move to Away_Far before going to destination stacker
+                // Arm cannot move directly to destination stacker from SafeLow
+                short armPosition = KX2.DetermineTeachPoint(TeachPoint: ref teachPoint, null);
+                if (armPosition == 0)
+                {
+                    KX2.SetMovePathMode(KX2RobotControlNamespace.KX2RobotControl.eMovePathMode.Joint);
+                    MovetoTeachPoint("Away_Far");
+                }
+
+                KX2.SetMovePathMode(KX2RobotControlNamespace.KX2RobotControl.eMovePathMode.Linear);
                 ret = KX2.RemovePlateFromHotel(Parameters.TopTeachpointDestination, Parameters.BottomTeachpointDestination,
                                     Parameters.RetractTeachpointDestination, stackCapacity, location,
                                     Parameters.GripperLiftHeight, Parameters.ArmSpeed, Parameters.GripperTimeDelay, true);
+                // set movepathmode back to joint to avoid interpolation errors
+                KX2.SetMovePathMode(KX2RobotControlNamespace.KX2RobotControl.eMovePathMode.Joint);
+
+                MovetoTeachPoint("Away_Far");
             }
             else
             {
@@ -322,12 +351,12 @@ namespace Integration
             }
             HandleKX2ErrorCode(ret);
 
-            KX2.SetMovePathMode(KX2RobotControlNamespace.KX2RobotControl.eMovePathMode.Joint);
             return ret;
         }
         internal short GetPlateFromStack(string plateID, short stackCapacity, short location, short resumeLine)
         {
             short ret;
+
             KX2.SetMovePathMode(KX2RobotControlNamespace.KX2RobotControl.eMovePathMode.Linear);
             //ret = KX2.RemovePlateFromHotel(TopTeachpoint, BottomTeachpoint, RetractTeachpoint, HotelCapacity, GetPlateSelfLocation(plate), GripperLiftHeight, ArmSpeed, GripperTimeDelay, true, 0, 0, Waypoint, true, true);
 
@@ -367,8 +396,10 @@ namespace Integration
             }
             else if (plateID.Contains("destination"))
             {
+                KX2.SetMovePathMode(KX2RobotControlNamespace.KX2RobotControl.eMovePathMode.Joint);
                 MovetoTeachPoint("SafeLow");
                 MovetoTeachPoint("Away_Far");
+                KX2.SetMovePathMode(KX2RobotControlNamespace.KX2RobotControl.eMovePathMode.Linear);
                 ret = KX2.PlacePlateInHotel(Parameters.TopTeachpointDestination, Parameters.BottomTeachpointDestination,
                     Parameters.RetractTeachpointDestination, stackCapacity, location, Parameters.GripperLiftHeight,
                     Parameters.ArmSpeed, Parameters.GripperTimeDelay, true);
@@ -478,7 +509,7 @@ namespace Integration
                 // This can be done in your main form's FormClosed event. If Dispose is not executed, 
                 // the application will not shutdown properly
 
-
+                m_spel.MotorsOn = false;
                 m_spel.Dispose();
             }
 

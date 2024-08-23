@@ -87,6 +87,7 @@ namespace Integration
             if (OnToolAttached != null)
             {
                 await OnToolAttached(toolId, cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
                 SetToolState("any_tool", "attached", true);
                 SetToolState(toolId, "attached", true);
                 SetToolState(toolId, "safe", true);
@@ -99,6 +100,7 @@ namespace Integration
             if (OnToolDetached != null)
             {
                 await OnToolDetached(toolId, cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
                 SetToolState("any_tool", "attached", false);
                 SetToolState(toolId, "attached", false);
             }
@@ -110,6 +112,7 @@ namespace Integration
             if (OnWashCompleted != null)
             {
                 await OnWashCompleted(toolId, cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
                 SetToolState(toolId, "washed", true);
             }
         }
@@ -121,6 +124,7 @@ namespace Integration
             {
                 SetToolState(toolId, "safe", false);
                 await OnTransferCompleted(toolId, cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
                 SetToolState(toolId, "transferred", true);
                 SetToolState(toolId, "washed", false);
                 SetStageState("destination", "transferred", true);
@@ -133,6 +137,7 @@ namespace Integration
             if (OnToolSafe != null)
             {
                 await OnToolSafe(toolId, cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
                 SetToolState(toolId, "safe", true);
                 SetToolState(toolId, "transferred", false);
             }
@@ -157,6 +162,7 @@ namespace Integration
             if (OnPlateGrabbedFromHotel != null)
             {
                 await OnPlateGrabbedFromHotel(plateID, location, cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
                 SetArmState("plate_gripped", true);
                 SetCarouselState("safe", false);
             }
@@ -168,6 +174,7 @@ namespace Integration
             {
                 SetArmState("safe", false);
                 await OnPlatePlacedToStage(plateID, cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
                 SetStageState(plateType, "present", true);
                 SetStageState("destination", "transferred", false);
                 SetArmState("plate_gripped", false);
@@ -180,6 +187,7 @@ namespace Integration
             {
                 SetArmState("safe", false);
                 await OnPlateGrabbedFromStage(plateID, cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
                 SetStageState(plateType, "present", false);
                 SetArmState("plate_gripped", true);
             }
@@ -190,6 +198,7 @@ namespace Integration
             if (OnPlatePlacedToStack != null)
             {
                 await OnPlatePlacedToStack(plateID, location, cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
                 SetArmState("plate_gripped", false);
                 SetCarouselState("safe", false);
             }
@@ -200,6 +209,7 @@ namespace Integration
             if (OnArmSafe != null)
             {
                 await OnArmSafe(cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
                 SetArmState("safe", true);
             }
         }
@@ -209,6 +219,7 @@ namespace Integration
             if (OnArmHome != null)
             {
                 await OnArmHome(cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
             }
         }
 
@@ -224,6 +235,7 @@ namespace Integration
             ct.ThrowIfCancellationRequested();
             if (OnCarouselRotated != null){
                 await OnCarouselRotated(position, plateType, ct);
+                ct.ThrowIfCancellationRequested();
                 SetCarouselState("safe", true);
             }
         }
@@ -233,6 +245,7 @@ namespace Integration
             ct.ThrowIfCancellationRequested();
             if (OnPlatePlacedInStacker != null){
                 await OnPlatePlacedInStacker(plateId, stackerIndex, position, ct);
+                ct.ThrowIfCancellationRequested();
             }
         }
 
@@ -241,6 +254,7 @@ namespace Integration
             ct.ThrowIfCancellationRequested();
             if (OnPlateRemovedFromStacker != null){
                 await OnPlateRemovedFromStacker(plateId, stackerIndex, position, ct);
+                ct.ThrowIfCancellationRequested();
             }
         }
          
@@ -252,6 +266,7 @@ namespace Integration
             ct.ThrowIfCancellationRequested();
             if (OnClampsStateChanged != null){
                 await OnClampsStateChanged(state, ct);
+                ct.ThrowIfCancellationRequested();
             }
             switch (state)
             {
@@ -560,10 +575,10 @@ namespace Integration
             SetToolState("96", "washed", false);
             SetToolState("100", "washed", false);
             SetToolState("300", "washed", false);
-            SetToolState("33", "safe", false);
-            SetToolState("96", "safe", false);
-            SetToolState("100", "safe", false);
-            SetToolState("300", "safe", false);
+            SetToolState("33", "safe", true);
+            SetToolState("96", "safe", true);
+            SetToolState("100", "safe", true);
+            SetToolState("300", "safe", true);
             SetToolState("33", "transferred", false);
             SetToolState("96", "transferred", false);
             SetToolState("100", "transferred", false);
@@ -637,6 +652,8 @@ namespace Integration
                     break;
                 case "KX2":
                     await RunKX2CommandAsync(commandString, ct);
+                    ct.ThrowIfCancellationRequested();
+                    _events.ResumeLine = 0;
                     break;
                 default:
                     Console.WriteLine("Instrument not supported");
@@ -761,6 +778,7 @@ namespace Integration
                 if (_carousel.CurrentPosition != plateLocation.stackerIndex)
                 {
                     await _events.RaiseCarouselRotated(plateLocation.stackerIndex, plateType, ct);
+                    ct.ThrowIfCancellationRequested();
                     _carousel.RotateToPosition(plateLocation.stackerIndex);
                 }
                 else
@@ -769,8 +787,7 @@ namespace Integration
                 }
 
                 await Task.WhenAll(
-                    _events.WaitForArmState("plate_gripped", false, ct),
-                    _events.WaitForCarouselState("safe", true, ct)
+                    _events.WaitForArmState("plate_gripped", false, ct)
                 );
                 // Last task to wait for
                 await _events.WaitForCarouselState("safe", true, ct);
@@ -788,6 +805,7 @@ namespace Integration
                 //}
 
                 await _events.RaisePlateGrabbedFromStack(plateID, plateLocation.platePosition, ct);
+                ct.ThrowIfCancellationRequested();
                 _carousel.RemovePlate(_events._plates.Find(p => p.ID == plateID));
             }
             else if (location == "stage")
@@ -814,6 +832,7 @@ namespace Integration
                 if (_carousel.CurrentPosition != plateLocation.stackerIndex)
                 {
                     await _events.RaiseCarouselRotated(plateLocation.stackerIndex, plateType, ct);
+                    ct.ThrowIfCancellationRequested();
                     _carousel.RotateToPosition(plateLocation.stackerIndex);
                 }
                 else
@@ -885,21 +904,24 @@ namespace Integration
                 try
                 {
                     await _parser.RunNextCommandAsync(_instrument, command, ct);
-                    commandID++;
                 }
                 catch (OperationCanceledException)
                 {
                     // Handle cancellation
-                    SaveRunState(journalID, commandID);
+                    //SaveRunState(journalID, commandID);
                 }
                 catch (Exception ex)
                 {
                     // Log the exception
-                    Console.WriteLine($"Unexpected exception: {ex}");
-                    throw; // Re-throw the exception if you want to propagate it
+                    //Console.WriteLine($"Unexpected exception: {ex}");
+                    //throw; // Re-throw the exception if you want to propagate it
                 }
                 finally
                 {
+                    if (!ct.IsCancellationRequested)
+                    {
+                        commandID++;
+                    }
                     SaveRunState(journalID, commandID);
                 }
             }

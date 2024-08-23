@@ -559,6 +559,7 @@ namespace Integration
                 InsertData(_connection, journalInfo);
             }
         }
+
         private void InsertData(SQLiteConnection connection, JournalInfo journalInfo)
         {
             var sb = new StringBuilder();

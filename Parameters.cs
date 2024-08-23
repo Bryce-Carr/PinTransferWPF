@@ -10,7 +10,7 @@ namespace Integration
     {
         // For testing/debugging
         internal static bool Testing = true;
-        internal static bool UsingInstruments = false;
+        internal static bool UsingInstruments = true;
 
         // Databases
         internal static string _LabwareDatabase = "labware.db";

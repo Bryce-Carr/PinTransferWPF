@@ -4,6 +4,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.ComponentModel.Design;
+using System.Diagnostics.Eventing.Reader;
 using System.Linq;
 using System.Text.Json;
 using System.Threading;
@@ -45,6 +46,7 @@ namespace PinTransferWPF
 
                 void MainWindow_Closing(object sender, CancelEventArgs e)
                 {
+
                     InstrumentController.OnShutdown();
                 }
             }
@@ -148,7 +150,6 @@ namespace PinTransferWPF
             int timeout = 0;
             byte index = 0;
             short errorCode = 0;
-            short resumeLine = 0;
             // Clamps
             _events.OnClampsStateChanged += async (state, ct) =>
             {
@@ -325,12 +326,9 @@ namespace PinTransferWPF
                     }
                     else
                     {
-                        errorCode = InstrumentController.GetPlateFromStack(plateID, (short)_stackCapacity, (short)location, resumeLine);
+                        errorCode = InstrumentController.GetPlateFromStack(plateID, (short)_stackCapacity, (short)location, (short)_events.ResumeLine);
                     }
-                    if (errorCode == 2)
-                    {
-                        Int32.TryParse(InstrumentController.KX2.GetErrorCode(2), out _events.ResumeLine);
-                    }
+                    Int32.TryParse(InstrumentController.KX2.GetErrorCode(2), out _events.ResumeLine);
                 });
             };
 
@@ -346,12 +344,9 @@ namespace PinTransferWPF
                     }
                     else
                     {
-                        errorCode = InstrumentController.GetPlateFromStage(plateID, resumeLine);
+                        errorCode = InstrumentController.GetPlateFromStage(plateID, (short)_events.ResumeLine);
                     }
-                    if (errorCode == 2)
-                    {
-                        Int32.TryParse(InstrumentController.KX2.GetErrorCode(2), out _events.ResumeLine);
-                    }
+                    Int32.TryParse(InstrumentController.KX2.GetErrorCode(2), out _events.ResumeLine);
                 });
             };
 
@@ -367,12 +362,9 @@ namespace PinTransferWPF
                     }
                     else
                     {
-                        errorCode = InstrumentController.SetPlateToStack(plateID, (short)_stackCapacity, (short)location, resumeLine);
+                        errorCode = InstrumentController.SetPlateToStack(plateID, (short)_stackCapacity, (short)location, (short)_events.ResumeLine);
                     }
-                    if (errorCode == 2)
-                    {
-                        Int32.TryParse(InstrumentController.KX2.GetErrorCode(2), out _events.ResumeLine);
-                    }
+                    Int32.TryParse(InstrumentController.KX2.GetErrorCode(2), out _events.ResumeLine);
                 });
             };
 
@@ -388,12 +380,9 @@ namespace PinTransferWPF
                     }
                     else
                     {
-                        errorCode = InstrumentController.SetPlateToStage(plateID, resumeLine);
+                        errorCode = InstrumentController.SetPlateToStage(plateID, (short)_events.ResumeLine);
                     }
-                    if (errorCode == 2)
-                    {
-                        Int32.TryParse(InstrumentController.KX2.GetErrorCode(2), out _events.ResumeLine);
-                    }
+                    Int32.TryParse(InstrumentController.KX2.GetErrorCode(2), out _events.ResumeLine);
                 });
             };
 
@@ -680,6 +669,8 @@ namespace PinTransferWPF
             List<Plate> deserializedPlates = PlateSerializer.DeserializePlates(serializedPlates);
             _events._plates = deserializedPlates;
             PopulateCarousel(deserializedPlates);
+            _events.ResumeLine = 0;
+            _kx2Runner.SaveRunState(currentJournalID, 1);
 
             RunCommandsButton.IsEnabled = false;
             CancelButton.IsEnabled = true;
@@ -693,7 +684,7 @@ namespace PinTransferWPF
             try
             {
                 await Task.WhenAll(
-                    _epsonRunner.RunCommandsAsync(currentJournalID, 1, _cts.Token),
+                    //_epsonRunner.RunCommandsAsync(currentJournalID, 1, _cts.Token),
                     _kx2Runner.RunCommandsAsync(currentJournalID, 1, _cts.Token)
                 );
             }
@@ -733,13 +724,13 @@ namespace PinTransferWPF
             ResumeRun(lastRunState);
         }
 
-        private void CancelButton_Click(object sender, RoutedEventArgs e)
+        private async void CancelButton_Click(object sender, RoutedEventArgs e)
         {
-            _cts?.Cancel();
             CancelButton.IsEnabled = false;
             StatusTextBlock.Text += "Cancelling...";
-
-            if (Parameters.UsingInstruments)
+            InstrumentController.KX2.ScriptStop();
+            _cts?.Cancel();
+            if(Parameters.UsingInstruments)
             {
                 InstrumentController.StopAll();
             }
