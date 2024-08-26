@@ -149,6 +149,7 @@
       <DependentUpon>LabwareDefinitionsWindow.xaml</DependentUpon>
     </Compile>
     <Compile Include="WindowNavigation.cs" />
+    <Compile Include="WindowTools.cs" />
     <Page Include="MainWindow.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>

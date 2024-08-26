@@ -31,6 +31,17 @@ namespace Integration
             {"NoDevicesInitialized", "No Devices Initialized!"}
         };
 
+        public delegate Task InstrumentEventHandler(CancellationToken cancellationToken);
+        public event InstrumentEventHandler OnInstrumentInitialization;
+        internal async Task RaiseInstrumentInitialization(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (OnInstrumentInitialization != null)
+            {
+                await OnInstrumentInitialization(cancellationToken);
+            }
+        }
+
         internal KX2RobotControlNamespace.KX2RobotControl KX2; // declare KX2
         internal CarouselControlNamespace.CarouselControl CS6; // declare carousel
         internal Spel m_spel; // declare m_spel
@@ -46,6 +57,12 @@ namespace Integration
             CS6 = new CarouselControlNamespace.CarouselControl();
             // instantiate m_spel
             m_spel = new Spel();
+
+            OnInstrumentInitialization += async (ct) =>
+            {
+                ct.ThrowIfCancellationRequested();
+
+            };
         }
 
         internal void ShowOverrideDeviceInitialization()
@@ -56,7 +73,6 @@ namespace Integration
             {
                 //// initialize KX2 object
                 InitializeAllDevices();
-
             }
             else if (messageBoxResult == MessageBoxResult.No)
             {

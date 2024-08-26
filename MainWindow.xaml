@@ -3,63 +3,244 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:tools="clr-namespace:WindowTools"
         xmlns:local="clr-namespace:PinTransferWPF"
         mc:Ignorable="d"
-        Title="MainWindow" Height="450" Width="800">
+        WindowStyle="None"
+        Title="Pin Transfer v2.0"
+        Height="{Binding Source={x:Static SystemParameters.PrimaryScreenHeight}, Converter={tools:RatioConverter}, ConverterParameter='0.7' }" 
+        Width="{Binding Source={x:Static SystemParameters.PrimaryScreenWidth}, Converter={tools:RatioConverter}, ConverterParameter='0.7' }" 
+        WindowStartupLocation="CenterScreen"
+        >
+    
+    <Window.Resources>
+        <!-- Minimize Button Template -->
+        <Style x:Key="TitleBarButton" TargetType="Button">
+            <!-- Define the style for the minimize button here -->
+            <Setter Property="Background" Value="Transparent"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="LightGray" />
+                </Trigger>
+                <Trigger Property="IsPressed" Value="True">
+                    <Setter Property="Background" Value="DarkGray" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+        <ControlTemplate x:Key="MinimizeButtonControlTemplate" TargetType="Button">
+            <!-- Define the control template for the minimize button here -->
+            <Border Background="{TemplateBinding Background}">
+                <TextBlock Text="🗕" FontFamily ="Deja Vu" FontSize="24" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+        </ControlTemplate>
+
+        <!-- Maximize Button Template -->
+        <ControlTemplate x:Key="MaximizeButtonControlTemplate" TargetType="Button">
+            <Border Background="{TemplateBinding Background}">
+                <Grid>
+                    <TextBlock Text="🗖" FontFamily ="Deja Vu" FontSize="24" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Grid>
+            </Border>
+        </ControlTemplate>
+
+        <!-- Restore Button Template -->
+        <ControlTemplate x:Key="RestoreButtonControlTemplate" TargetType="Button">
+            <Border Background="{TemplateBinding Background}">
+                <Grid>
+                    <TextBlock Text="🗗" FontFamily ="Deja Vu" FontSize="24" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Grid>
+            </Border>
+        </ControlTemplate>
+        
+        <!-- Close Button Template -->
+        <ControlTemplate x:Key="CloseButtonControlTemplate" TargetType="Button">
+            <!-- Define the control template for the close button here -->
+            <Border Background="{TemplateBinding Background}">
+                <TextBlock Text="✖" FontFamily ="Deja Vu" FontSize="24" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+        </ControlTemplate>
+
+        <ControlTemplate x:Key="TitleBarComboBoxTemplate" TargetType="{x:Type ComboBox}">
+            <Grid>
+                <ToggleButton x:Name="ToggleButton"
+                          Grid.Column="0"
+                          Margin="0,0,5,0"
+                          Focusable="False"
+                          ClickMode="Press"
+                          IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
+                    <ToggleButton.Template>
+                        <ControlTemplate TargetType="{x:Type ToggleButton}">
+                            <Border Background="{TemplateBinding Background}">
+                                <ContentPresenter Content="File" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                        </ControlTemplate>
+                    </ToggleButton.Template>
+                    <ToggleButton.Style>
+                        <Style TargetType="{x:Type ToggleButton}">
+                            <Setter Property="Background" Value="Transparent"/>
+                            <Style.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter Property="Background" Value="LightGray" />
+                                </Trigger>
+                                <Trigger Property="IsPressed" Value="True">
+                                    <Setter Property="Background" Value="DarkGray" />
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ToggleButton.Style>
+                </ToggleButton>
+                <Popup x:Name="Popup" AllowsTransparency="True" Focusable="False" IsOpen="{Binding IsDropDownOpen, RelativeSource={RelativeSource Mode=TemplatedParent}}" Placement="Bottom" PopupAnimation="Slide">
+                    <Grid x:Name="DropDown" SnapsToDevicePixels="True" MinWidth="{Binding ActualWidth, ElementName=labelTextBlock}" MaxHeight="{TemplateBinding MaxDropDownHeight}">
+                        <Border x:Name="DropDownBorder" Background="White" BorderBrush="DarkGray" BorderThickness="1">
+                            <ScrollViewer SnapsToDevicePixels="True">
+                                <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Contained" />
+                            </ScrollViewer>
+                        </Border>
+                    </Grid>
+                </Popup>
+            </Grid>
+        </ControlTemplate>
+    </Window.Resources>
+    
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
 
-        <StackPanel Grid.Row="0" HorizontalAlignment="Center" Margin="10">
-            <ComboBox x:Name="toolsComboBox" SelectionChanged="toolsComboBox_SelectionChanged">
-                <ComboBox.Template>
-                    <ControlTemplate TargetType="{x:Type ComboBox}">
-                        <Grid>
-                            <Button x:Name="Button" Grid.Column="2" Content="Tools" Focusable="False" ClickMode="Release" Click="tools_Clicked">
-                                <Button.Template>
-                                    <ControlTemplate TargetType="{x:Type Button}">
-                                        <Border Background="{TemplateBinding Background}">
-                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+        <DockPanel Grid.Column="3" HorizontalAlignment="Stretch"
+           VerticalAlignment="Stretch"
+           LastChildFill="True">
+
+            <StackPanel Orientation="Horizontal"
+                    VerticalAlignment="Stretch"
+                    DockPanel.Dock="Right"
+                    HorizontalAlignment="Right">
+
+                <Button x:Name="MinimizeButton"
+                    KeyboardNavigation.IsTabStop="False"
+                    Click="MinimizeWindow"
+                    Style="{StaticResource TitleBarButton}"
+                    Template="{StaticResource MinimizeButtonControlTemplate}"/>
+
+                <Button x:Name="MaximizeButton"
+                    KeyboardNavigation.IsTabStop="False"
+                    Click="MaximizeClick"
+                    Style="{DynamicResource TitleBarButton}"
+                    Template="{DynamicResource MaximizeButtonControlTemplate}" />
+
+                <Button x:Name="CloseButton"
+                    KeyboardNavigation.IsTabStop="False"
+                    Click="CloseWindow"
+                    Style="{DynamicResource TitleBarButton}"
+                    Template="{DynamicResource CloseButtonControlTemplate}"/>
+
+            </StackPanel>
+        </DockPanel>
+
+        <DockPanel Grid.Column="0" Grid.RowSpan="1">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Stretch" DockPanel.Dock="Left"
+                        HorizontalAlignment="Left">
+                <ComboBox x:Name="fileComboBox"  SelectionChanged="fileComboBox_SelectionChanged">
+                    <ComboBox.Template>
+                        <ControlTemplate TargetType="{x:Type ComboBox}">
+                            <Grid>
+                                <Button x:Name="Button" Grid.Column="0" Margin="0,0,5,0" Content="File" Focusable="False" ClickMode="Release" Click="file_Clicked">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="{x:Type Button}">
+                                            <Border Background="{TemplateBinding Background}">
+                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Border>
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                    <Button.Style>
+                                        <Style TargetType="{x:Type Button}">
+                                            <Setter Property="Background" Value="Transparent"/>
+                                            <Style.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter Property="Background" Value="LightGray" />
+                                                </Trigger>
+                                                <Trigger Property="IsPressed" Value="True">
+                                                    <Setter Property="Background" Value="DarkGray" />
+                                                </Trigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
+                                <Popup x:Name="Save" AllowsTransparency="True" Focusable="False" IsOpen="{Binding IsDropDownOpen, RelativeSource={RelativeSource Mode=TemplatedParent}}" Placement="Bottom" PopupAnimation="Slide">
+                                    <Grid x:Name="SaveDropDown" SnapsToDevicePixels="True" MinWidth="{Binding ActualWidth, ElementName=labelTextBlock}" MaxHeight="{TemplateBinding MaxDropDownHeight}">
+                                        <Border x:Name="SaveDropDownBorder" Background="White" BorderBrush="DarkGray" BorderThickness="1">
+                                            <ScrollViewer SnapsToDevicePixels="True">
+                                                <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Contained" />
+                                            </ScrollViewer>
                                         </Border>
-                                    </ControlTemplate>
-                                </Button.Template>
-                                <Button.Style>
-                                    <Style TargetType="{x:Type Button}">
-                                        <Setter Property="Background" Value="Transparent"/>
-                                        <Style.Triggers>
-                                            <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter Property="Background" Value="LightGray" />
-                                            </Trigger>
-                                            <Trigger Property="IsPressed" Value="True">
-                                                <Setter Property="Background" Value="DarkGray" />
-                                            </Trigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </Button.Style>
-                            </Button>
+                                    </Grid>
+                                </Popup>
+                            </Grid>
+                        </ControlTemplate>
+                    </ComboBox.Template>
+                    <ComboBoxItem Content="Save Script"/>
+                    <ComboBoxItem Content="Load Script"/>
+                </ComboBox>
+                <ComboBox x:Name="toolsComboBox" SelectionChanged="toolsComboBox_SelectionChanged">
+                    <ComboBox.Template>
+                        <ControlTemplate TargetType="{x:Type ComboBox}">
+                            <Grid>
+                                <Button x:Name="Button" Grid.Column="0" Content="Tools" Focusable="False" ClickMode="Release" Click="tools_Clicked">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="{x:Type Button}">
+                                            <Border Background="{TemplateBinding Background}">
+                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Border>
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                    <Button.Style>
+                                        <Style TargetType="{x:Type Button}">
+                                            <Setter Property="Background" Value="Transparent"/>
+                                            <Style.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter Property="Background" Value="LightGray" />
+                                                </Trigger>
+                                                <Trigger Property="IsPressed" Value="True">
+                                                    <Setter Property="Background" Value="DarkGray" />
+                                                </Trigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
 
-                            <Popup x:Name="Popup" AllowsTransparency="True" Focusable="False" IsOpen="{Binding IsDropDownOpen, RelativeSource={RelativeSource Mode=TemplatedParent}}" Placement="Bottom" PopupAnimation="Slide">
-                                <Grid x:Name="DropDown" SnapsToDevicePixels="True" MinWidth="{Binding ActualWidth, ElementName=labelTextBlock}" MaxHeight="{TemplateBinding MaxDropDownHeight}">
-                                    <Border x:Name="DropDownBorder" Background="White" BorderBrush="Black" BorderThickness="1">
-                                        <ScrollViewer SnapsToDevicePixels="True">
-                                            <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Contained" />
-                                        </ScrollViewer>
-                                    </Border>
-                                </Grid>
-                            </Popup>
-                        </Grid>
-                    </ControlTemplate>
-                </ComboBox.Template>
-                <ComboBoxItem Content="LabwareM"/>
-            </ComboBox>
-
-        </StackPanel>
+                                <Popup x:Name="Popup" AllowsTransparency="True" Focusable="False" IsOpen="{Binding IsDropDownOpen, RelativeSource={RelativeSource Mode=TemplatedParent}}" Placement="Bottom" PopupAnimation="Slide">
+                                    <Grid x:Name="DropDown" SnapsToDevicePixels="True" MinWidth="{Binding ActualWidth, ElementName=labelTextBlock}" MaxHeight="{TemplateBinding MaxDropDownHeight}">
+                                        <Border x:Name="DropDownBorder" Background="White" BorderBrush="DarkGray" BorderThickness="1">
+                                            <ScrollViewer SnapsToDevicePixels="True">
+                                                <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Contained" />
+                                            </ScrollViewer>
+                                        </Border>
+                                    </Grid>
+                                </Popup>
+                            </Grid>
+                        </ControlTemplate>
+                    </ComboBox.Template>
+                    <ComboBoxItem Content="Labware Manager"/>
+                </ComboBox>
+                <ComboBox x:Name="testComboBox" 
+                    Template="{StaticResource TitleBarComboBoxTemplate}"
+                    SelectionChanged="fileComboBox_SelectionChanged">
+                    <ComboBoxItem Content="LabwareManager"/>
+                </ComboBox>
+            </StackPanel>       
+        </DockPanel>
 
         <!-- Add other UI elements in the second row -->
         <!-- New UI elements for creating a run -->
-        <Grid Grid.Row="1" HorizontalAlignment="Left" Margin="243,15,0,240" Width="311">
+        <Grid Grid.Row="2" HorizontalAlignment="Left" Margin="243,15,0,240" Width="311">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
@@ -85,14 +266,14 @@
             </StackPanel>
             <Button Grid.Row="4" x:Name="btnCreateRun" Margin="5" Padding="5" Content="Create Run" Click="btnCreateRun_Click" />
         </Grid>
-        <Button x:Name="RunCommandsButton" Content="Run Commands" HorizontalAlignment="Left" Margin="643,101,0,0" Grid.Row="1" VerticalAlignment="Top" Click="RunCommandsButton_Click"/>
-        <Button x:Name="CancelButton" Content="Pause" HorizontalAlignment="Left" Margin="648,143,0,0" Grid.Row="1" VerticalAlignment="Top" Click="CancelButton_Click" IsEnabled="False"/>
-        <ScrollViewer VerticalScrollBarVisibility="Auto" Name="StatusScrollViewer" Grid.Row="1" Margin="-21,158,21,0" VerticalAlignment="Top" Height="240" Width="800">
+        <Button x:Name="RunCommandsButton" Content="Run Commands" HorizontalAlignment="Left" Margin="643,101,0,0" Grid.Row="3" VerticalAlignment="Top" Click="RunCommandsButton_Click"/>
+        <Button x:Name="CancelButton" Content="Pause" HorizontalAlignment="Left" Margin="648,143,0,0" Grid.Row="3" VerticalAlignment="Top" Click="CancelButton_Click" IsEnabled="False"/>
+        <ScrollViewer VerticalScrollBarVisibility="Auto" Name="StatusScrollViewer" Grid.Row="3" Margin="-21,158,21,0" VerticalAlignment="Top" Height="240" Width="800">
             <TextBlock x:Name="StatusTextBlock" 
                TextWrapping="Wrap" 
                VerticalAlignment="Stretch" 
                HorizontalAlignment="Left"/>
         </ScrollViewer>
-        <Button Content="ResumeButton" HorizontalAlignment="Left" Margin="692,143,0,0" Grid.Row="1" VerticalAlignment="Top" Click="ResumeButton_Click"/>
+        <Button Content="ResumeButton" HorizontalAlignment="Left" Margin="692,143,0,0" Grid.Row="3" VerticalAlignment="Top" Click="ResumeButton_Click"/>
     </Grid>
 </Window>

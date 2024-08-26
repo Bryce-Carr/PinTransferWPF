@@ -58,7 +58,7 @@ namespace PinTransferWPF
             _stackCapacity = 25; // TODO: replace this with a function that will determine stack capacity if using sequential stackers
             Func<int, StackType> stackerFactory = _stackCapacity => new StackType(_stackCapacity);
             _carousel = new Carousel<StackType>(_numStacks, _stackCapacity, stackerFactory);
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
+
             _runLogger = new RunLogger(connectionString);
             _parser = new JournalParser<StackType>(connectionString, _events, _carousel);
             _epsonRunner = new CommandRunner<StackType>(_parser, "Epson", _runLogger, _events);
@@ -150,6 +150,7 @@ namespace PinTransferWPF
             int timeout = 0;
             byte index = 0;
             short errorCode = 0;
+
             // Clamps
             _events.OnClampsStateChanged += async (state, ct) =>
             {
@@ -165,7 +166,7 @@ namespace PinTransferWPF
                     {
                         InstrumentController.m_spel.Call("CloseClamps");
                     }
-                });                
+                });
             };
 
             // Epson
@@ -356,7 +357,7 @@ namespace PinTransferWPF
                 AppendStatus($"{plateID} placed to hotel location {location}");
                 await Task.Run(() =>
                 {
-                    if ( _events.ResumeLine == 0)
+                    if (_events.ResumeLine == 0)
                     {
                         errorCode = InstrumentController.SetPlateToStack(plateID, (short)_stackCapacity, (short)location);
                     }
@@ -510,20 +511,6 @@ namespace PinTransferWPF
                 await Task.Delay(2000, ct);
             };
         }
-        private void toolsComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            if (toolsComboBox.SelectedIndex == 0) // "Open New Menu" option
-            {
-                LabwareDefinitionsWindow labwareDefinitionsWindow = new LabwareDefinitionsWindow("Data Source=" + Parameters.LabwareDatabase);
-                labwareDefinitionsWindow.ShowDialog();
-                toolsComboBox.SelectedIndex = -1;
-            }
-        }
-
-        private void tools_Clicked(object sender, RoutedEventArgs e)
-        {
-            toolsComboBox.IsDropDownOpen = !toolsComboBox.IsDropDownOpen;
-        }
 
         private void btnCreateRun_Click(object sender, RoutedEventArgs e)
         {
@@ -572,7 +559,7 @@ namespace PinTransferWPF
                 }
                 foreach (var sourcePlate in SourcePlates)
                 {
-                    for(int replicate = 1; replicate <= sourcePlate.Replicates.Item2; replicate++)
+                    for (int replicate = 1; replicate <= sourcePlate.Replicates.Item2; replicate++)
                     {
                         StartingStack = _numStacks - ((Math.Abs(DestinationPlates.Count - 1) / _stackCapacity));
                         FinalStack = StartingStack;
@@ -603,7 +590,7 @@ namespace PinTransferWPF
                             {
                                 { "pinned", false }
                             }
-                            
+
                         });
                         DestinationPlate plate = DestinationPlates.Find(dp => dp.ID == "destination_" + (DestinationPlates.Count()).ToString());
                         plate.AddSourcePlate(sourcePlate.ID, sourcePlate.Replicates.Item2);
@@ -636,7 +623,7 @@ namespace PinTransferWPF
                 }
 
                 // Add DestinationPlates to the dictionary
-                foreach (var plate in DestinationPlates)                                                               
+                foreach (var plate in DestinationPlates)
                 {
                     platesDictionary[plate.ID] = new Tuple<int, int>(plate.Stack, plate.PositionInStack);
                 }
@@ -663,6 +650,16 @@ namespace PinTransferWPF
         }
         private async void RunCommandsButton_Click(object sender, RoutedEventArgs e)
         {
+            if (Parameters.UsingInstruments)
+            {
+                if (!InstrumentController.KX2.IsInitialized())
+                {
+                    await Task.Run(() =>
+                    {
+                        InstrumentController.InitializeArm();
+                    });
+                }
+            }
             string currentJournalID = "testJournal"; // Replace with actual journal ID
             _events.ResetEvents();
             string serializedPlates = _runLogger.LoadRunState(currentJournalID).InitialPlates;
@@ -708,7 +705,7 @@ namespace PinTransferWPF
             }
         }
 
-        private async void ResumeButton_Click( object sender, RoutedEventArgs e)
+        private async void ResumeButton_Click(object sender, RoutedEventArgs e)
         {
             var lastRunState = _runLogger.LoadRunState("testJournal"); // TODO: Replace with actual journal ID
             if (Parameters.UsingInstruments)
@@ -730,10 +727,62 @@ namespace PinTransferWPF
             StatusTextBlock.Text += "Cancelling...";
             InstrumentController.KX2.ScriptStop();
             _cts?.Cancel();
-            if(Parameters.UsingInstruments)
+            if (Parameters.UsingInstruments)
             {
                 InstrumentController.StopAll();
             }
+        }
+
+        private void toolsComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (toolsComboBox.SelectedIndex == 0) // "Open New Menu" option
+            {
+                LabwareDefinitionsWindow labwareDefinitionsWindow = new LabwareDefinitionsWindow("Data Source=" + Parameters.LabwareDatabase);
+                labwareDefinitionsWindow.ShowDialog();
+                toolsComboBox.SelectedIndex = -1;
+            }
+        }
+
+        private void fileComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (toolsComboBox.SelectedIndex == 0) // "Open New Menu" option
+            {
+                
+            }
+        }
+
+        private void tools_Clicked(object sender, RoutedEventArgs e)
+        {
+            toolsComboBox.IsDropDownOpen = !toolsComboBox.IsDropDownOpen;
+        }
+
+        private void file_Clicked(object sender, RoutedEventArgs e)
+        {
+            fileComboBox.IsDropDownOpen = !fileComboBox.IsDropDownOpen;
+        }
+        
+        private void MinimizeWindow(object sender, RoutedEventArgs e)
+        {
+            this.WindowState = WindowState.Minimized;
+        }
+
+        private void MaximizeClick(object sender, RoutedEventArgs e)
+        {
+            if (this.WindowState == WindowState.Maximized)
+            {
+                this.WindowState = WindowState.Normal;
+                MaximizeButton.Template = (ControlTemplate)this.Resources["MaximizeButtonControlTemplate"];
+            }
+            else
+            {
+                this.WindowState = WindowState.Maximized;
+                MaximizeButton.Template = (ControlTemplate)this.Resources["RestoreButtonControlTemplate"];
+            }
+        }
+
+        private void CloseWindow(object sender, RoutedEventArgs e)
+        {
+            this.Close();
         }
     }
 }
