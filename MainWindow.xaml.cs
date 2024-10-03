@@ -4,6 +4,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.ComponentModel.Design;
+using System.Data.Entity.Core.Common.CommandTrees.ExpressionBuilder;
 using System.Diagnostics.Eventing.Reader;
 using System.Linq;
 using System.Text.Json;
@@ -11,7 +12,11 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Documents;
+using System.Windows.Media;
+using System.Windows.Shapes;
+using System.Windows.Threading;
 using Integration;
 using RCAPINet;
 using static Integration.InstrumentEvents;
@@ -33,10 +38,21 @@ namespace PinTransferWPF
         private CancellationTokenSource _cts;
         private int _numStacks;
         private int _stackCapacity;
-
+        private DispatcherTimer resizeTimer;
         public MainWindow()
         {
             InitializeComponent();
+
+            // Define grid rows and columns
+            for (int i = 0; i < 3; i++)
+            {
+                StackerGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+                StackerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            }
+
+            CreateMicroplateStacker();
+            SizeChanged += MainWindow_SizeChanged;
+
             InstrumentController = new InstrumentController(this);
             if (Parameters.UsingInstruments)
             {
@@ -72,8 +88,20 @@ namespace PinTransferWPF
                 SetupEventHandlersText();
             }
             CheckForUnfinishedRun(connectionString);
-        }
 
+            this.Loaded += MainWindow_Loaded;
+            SizeChanged += MainWindow_SizeChanged;
+
+            // Initialize the resize timer
+            resizeTimer = new DispatcherTimer();
+            resizeTimer.Interval = TimeSpan.FromMilliseconds(250);
+            resizeTimer.Tick += ResizeTimer_Tick;
+        }
+        private void MainWindow_Loaded(object sender, RoutedEventArgs e)
+        {
+            // Delay the initial creation slightly to ensure the control has been rendered
+            resizeTimer.Start();
+        }
         private void CheckForUnfinishedRun(string connectionString)
         {
             var lastUnfinishedRunState = _runLogger.LoadMostRecentUnfinishedRunState();
@@ -747,7 +775,7 @@ namespace PinTransferWPF
         {
             if (toolsComboBox.SelectedIndex == 0) // "Open New Menu" option
             {
-                
+
             }
         }
 
@@ -760,7 +788,7 @@ namespace PinTransferWPF
         {
             fileComboBox.IsDropDownOpen = !fileComboBox.IsDropDownOpen;
         }
-        
+
         private void MinimizeWindow(object sender, RoutedEventArgs e)
         {
             this.WindowState = WindowState.Minimized;
@@ -783,6 +811,88 @@ namespace PinTransferWPF
         private void CloseWindow(object sender, RoutedEventArgs e)
         {
             this.Close();
+        }
+
+        private void CreateMicroplateStacker()
+        {
+            int Rows = 25;
+            int Columns = 6;
+            double aspectRatio = 4.0 / 1.0; // Width to height ratio for each stacker
+            double horizontalMargin = 10;
+            double verticalMargin = 5;
+
+            StackerGrid.Children.Clear();
+            StackerGrid.RowDefinitions.Clear();
+            StackerGrid.ColumnDefinitions.Clear();
+
+            for (int i = 0; i < Rows; i++)
+            {
+                StackerGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+            }
+
+            for (int j = 0; j < Columns; j++)
+            {
+                StackerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            }
+
+            double totalWidth = StackerGridViewbox.ActualWidth;
+            double totalHeight = StackerGridViewbox.ActualHeight;
+
+            // Calculate the maximum possible size for each stacker
+            double maxStackerWidth = (totalWidth - (Columns + 1) * horizontalMargin) / Columns;
+            double maxStackerHeight = (totalHeight - (Rows + 1) * verticalMargin) / Rows;
+
+            // Determine the actual size while maintaining the aspect ratio
+            double stackerWidth, stackerHeight;
+            if (maxStackerWidth / maxStackerHeight > aspectRatio)
+            {
+                // Height is the limiting factor
+                stackerHeight = maxStackerHeight;
+                stackerWidth = stackerHeight * aspectRatio;
+            }
+            else
+            {
+                // Width is the limiting factor
+                stackerWidth = maxStackerWidth;
+                stackerHeight = stackerWidth / aspectRatio;
+            }
+
+            // Ensure minimum size
+            stackerWidth = Math.Max(1, stackerWidth);
+            stackerHeight = Math.Max(1, stackerHeight);
+
+            for (int i = 0; i < Rows; i++)
+            {
+                for (int j = 0; j < Columns; j++)
+                {
+                    Rectangle rect = new Rectangle
+                    {
+                        Fill = Brushes.LightGray,
+                        Stroke = Brushes.Black,
+                        StrokeThickness = 1,
+                        Width = stackerWidth,
+                        Height = stackerHeight,
+                        Margin = new Thickness(horizontalMargin / 2, verticalMargin / 2, horizontalMargin / 2, verticalMargin / 2)
+                    };
+
+                    Grid.SetRow(rect, i);
+                    Grid.SetColumn(rect, j);
+                    StackerGrid.Children.Add(rect);
+                }
+            }
+        }
+
+        private void MainWindow_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            // Reset and start the timer on each size change
+            resizeTimer.Stop();
+            resizeTimer.Start();
+        }
+
+        private void ResizeTimer_Tick(object sender, EventArgs e)
+        {
+            resizeTimer.Stop();
+            CreateMicroplateStacker();
         }
     }
 }

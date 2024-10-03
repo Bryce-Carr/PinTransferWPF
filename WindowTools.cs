@@ -4,8 +4,10 @@ using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using System.Windows;
 using System.Windows.Data;
 using System.Windows.Markup;
+using System.Windows.Media;
 
 namespace WindowTools
 {
@@ -32,5 +34,42 @@ namespace WindowTools
             return _instance ?? (_instance = new RatioConverter());
         }
 
+    }
+
+    public class ComboBoxExtensions
+    {
+        public static readonly DependencyProperty ButtonFontFamilyProperty =
+            DependencyProperty.RegisterAttached(
+                "ButtonFontFamily",
+                typeof(FontFamily),
+                typeof(ComboBoxExtensions),
+                new PropertyMetadata(SystemFonts.MessageFontFamily));
+
+        public static void SetButtonFontFamily(UIElement element, FontFamily value)
+        {
+            element.SetValue(ButtonFontFamilyProperty, value);
+        }
+
+        public static FontFamily GetButtonFontFamily(UIElement element)
+        {
+            return (FontFamily)element.GetValue(ButtonFontFamilyProperty);
+        }
+
+        public static readonly DependencyProperty ButtonFontSizeProperty =
+            DependencyProperty.RegisterAttached(
+                "ButtonFontSize",
+                typeof(double),
+                typeof(ComboBoxExtensions),
+                new PropertyMetadata(SystemFonts.MessageFontSize));
+
+        public static void SetButtonFontSize(UIElement element, double value)
+        {
+            element.SetValue(ButtonFontSizeProperty, value);
+        }
+
+        public static double GetButtonFontSize(UIElement element)
+        {
+            return (double)element.GetValue(ButtonFontSizeProperty);
+        }
     }
 }
