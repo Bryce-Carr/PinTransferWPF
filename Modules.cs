@@ -5,6 +5,7 @@ using System.Linq;
 using System.Reflection;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace Integration
 {
@@ -60,44 +61,92 @@ namespace Integration
 
     // Update the Plate class to include JsonConverter attribute
     [JsonConverter(typeof(PlateConverter))]
-    public class Plate
+    public class Plate : ObservableObject
     {
-        public Dictionary<string, bool> Status { get; set; }
+        private Dictionary<string, bool> _status;
+        public Dictionary<string, bool> Status
+        {
+            get { return _status; }
+            set
+            {
+                if (value != _status)
+                {
+                    _status = value;
+                    OnPropertyChanged(nameof(Status));
+                }
+            }
+        }
 
         private string _id;
         public string ID
         {
-            get => _id;
-            set => _id = value;
+            get { return _id; }
+            set
+            {
+                if (value != _id)
+                {
+                    _id = value;
+                    OnPropertyChanged(nameof(ID));
+                }
+            }
         }
 
         private int _stack;
         public int Stack
         {
-            get => _stack;
-            set => _stack = value;
+            get { return _stack; }
+            set
+            {
+                if (value != _stack)
+                {
+                    _stack = value;
+                    OnPropertyChanged(nameof(Stack));
+                }
+            }
         }
 
         private int _finalStack;
         public int FinalStack
         {
-            get => _finalStack;
-            set => _finalStack = value;
+            get { return _finalStack; }
+            set
+            {
+                if (value != _finalStack)
+                {
+                    _finalStack = value;
+                    OnPropertyChanged(nameof(FinalStack));
+                }
+            }
         }
 
         private int _positionInStack;
         public int PositionInStack
         {
-            get => _positionInStack;
-            set => _positionInStack = value;
+            get { return _positionInStack; }
+            set
+            {
+                if (value != _positionInStack)
+                {
+                    _positionInStack = value;
+                    OnPropertyChanged(nameof(PositionInStack));
+                }
+            }
         }
 
-        public int _finalPositionInStack;
+        private int _finalPositionInStack;
         public int FinalPositionInStack
         {
-            get => _finalPositionInStack;
-            set => _finalPositionInStack = value;
+            get { return _finalPositionInStack; }
+            set
+            {
+                if (value != _finalPositionInStack)
+                {
+                    _finalPositionInStack = value;
+                    OnPropertyChanged(nameof(FinalPositionInStack));
+                }
+            }
         }
+
         public Plate()
         {
             Status = new Dictionary<string, bool>();

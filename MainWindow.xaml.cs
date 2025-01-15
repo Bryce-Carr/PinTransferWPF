@@ -14,7 +14,9 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Documents;
+using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Media3D;
 using System.Windows.Shapes;
 using System.Windows.Threading;
 using Integration;
@@ -39,6 +41,9 @@ namespace PinTransferWPF
         private int _numStacks;
         private int _stackCapacity;
         private DispatcherTimer resizeTimer;
+        private Dictionary<(int, int), Grid> Shelves = new Dictionary<(int, int), Grid>();
+
+
         public MainWindow()
         {
             InitializeComponent();
@@ -815,15 +820,16 @@ namespace PinTransferWPF
 
         private void CreateMicroplateStacker()
         {
-            int Rows = 25;
+            int Rows = 26;
             int Columns = 6;
-            double aspectRatio = 4.0 / 1.0; // Width to height ratio for each stacker
-            double horizontalMargin = 10;
+            double aspectRatio = 4.0 / 1; // Width to height ratio for each stacker
+            double horizontalMargin = 15;
             double verticalMargin = 5;
 
             StackerGrid.Children.Clear();
             StackerGrid.RowDefinitions.Clear();
             StackerGrid.ColumnDefinitions.Clear();
+            Shelves.Clear();
 
             for (int i = 0; i < Rows; i++)
             {
@@ -861,24 +867,125 @@ namespace PinTransferWPF
             stackerWidth = Math.Max(1, stackerWidth);
             stackerHeight = Math.Max(1, stackerHeight);
 
-            for (int i = 0; i < Rows; i++)
+            for (int i = 0; i < Rows - 1; i++)
             {
                 for (int j = 0; j < Columns; j++)
                 {
-                    Rectangle rect = new Rectangle
+                    Path shelf = CreateShelf(stackerWidth, stackerHeight);
+                    if ((j == 2 && i == 23) | (j == 2 && i == 24) | (j == 3 && i == 24) | (j == 3 && i == 23) | (j == 3 && i == 22) | (j == 3 && i == 21))
                     {
-                        Fill = Brushes.LightGray,
-                        Stroke = Brushes.Black,
-                        StrokeThickness = 1,
-                        Width = stackerWidth,
-                        Height = stackerHeight,
-                        Margin = new Thickness(horizontalMargin / 2, verticalMargin / 2, horizontalMargin / 2, verticalMargin / 2)
-                    };
+                        shelf.Fill = Brushes.Black;
+                    }
+                    else
+                    {
+                        shelf.Fill = Brushes.LightGray;
+                    }
+                    Grid containerGrid = new Grid();
+                    containerGrid.Children.Add(shelf);
+                    containerGrid.Margin = new Thickness(horizontalMargin / 2, verticalMargin / 2, horizontalMargin / 2, verticalMargin / 2);
 
-                    Grid.SetRow(rect, i);
-                    Grid.SetColumn(rect, j);
-                    StackerGrid.Children.Add(rect);
+                    Grid.SetRow(containerGrid, i);
+                    Grid.SetColumn(containerGrid, j);
+                    StackerGrid.Children.Add(containerGrid);
+
+                    // Store the containerGrid for later reference
+                    Shelves[(i, j)] = containerGrid;
                 }
+            }
+            // Add column numbers
+            for (int j = 0; j < Columns; j++)
+            {
+                TextBlock columnNumber = new TextBlock
+                {
+                    Text = (j + 1).ToString(),
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    FontWeight = FontWeights.Bold
+                };
+
+                Grid.SetRow(columnNumber, Rows - 1); // Place in the last row
+                Grid.SetColumn(columnNumber, j);
+                StackerGrid.Children.Add(columnNumber);
+            }
+        }
+
+        private Path CreateShelf(double width, double height)
+        {
+            double thickness = Math.Min(width, height) * 0.1; // Adjust thickness as needed
+
+            var pathFigure = new PathFigure
+            {
+                StartPoint = new Point(0, 0),
+                Segments = new PathSegmentCollection
+                {
+                    new LineSegment(new Point(0, height), true),
+                    new LineSegment(new Point(width, height), true),
+                    new LineSegment(new Point(width, 0), true),
+                    new LineSegment(new Point(width - thickness, 0), true),
+                    new LineSegment(new Point(width - thickness, height - thickness), true),
+                    new LineSegment(new Point(thickness, height - thickness), true),
+                    new LineSegment(new Point(thickness, 0), true),
+                    new LineSegment(new Point(0, 0), true)
+                }
+            };
+
+            var pathGeometry = new PathGeometry();
+            pathGeometry.Figures.Add(pathFigure);
+
+            return new Path
+            {
+                Data = pathGeometry,
+                Fill = Brushes.Black,
+                Stroke = Brushes.Transparent,
+                StrokeThickness = 1
+            };
+        }
+
+        public void AddPlateToShelf(int row, int column, Brush fillColor)
+        {
+            if (Shelves.TryGetValue((row, column), out Grid containerGrid))
+            {
+                containerGrid.UpdateLayout();
+                Path Shelf = containerGrid.Children[0] as Path; // Assuming the U shape is the first child
+                if (Shelf == null) return; // Exit if we can't find the U shape
+
+                double containerWidth = containerGrid.ActualWidth;
+                double containerHeight = containerGrid.ActualHeight;
+
+                if (containerWidth <= 0 || containerHeight <= 0)
+                {
+                    // If ActualWidth/Height are not set, use the Width/Height properties
+                    containerWidth = containerGrid.Width;
+                    containerHeight = containerGrid.Height;
+                }
+
+                double uThickness = Math.Min(containerWidth, containerHeight) * 0.1; // U shape thickness
+
+                // Calculate rectangle dimensions
+                double rectWidth = containerWidth - (4 * uThickness);
+                double rectHeight = containerHeight - (2 * uThickness);
+
+                Rectangle plate = new Rectangle
+                {
+                    Width = Math.Max(0, rectWidth),
+                    Height = Math.Max(0, rectHeight),
+                    VerticalAlignment = VerticalAlignment.Center,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    Fill = Brushes.Coral
+            };
+                // Add the event handler
+                plate.MouseLeftButtonDown += Plate_MouseLeftButtonDown;
+
+                // Add the rectangle to the existing containerGrid
+                containerGrid.Children.Add(plate);
+            }
+        }
+
+        private void Plate_MouseLeftButtonDown(object sender, EventArgs e)
+        {
+            if (sender is Rectangle clickedPlate)
+            {
+                clickedPlate.Fill = (clickedPlate.Fill == Brushes.Coral) ? Brushes.MediumSeaGreen : Brushes.Coral;
             }
         }
 
@@ -893,6 +1000,17 @@ namespace PinTransferWPF
         {
             resizeTimer.Stop();
             CreateMicroplateStacker();
+            AddPlateToShelf(24, 2, Brushes.MediumSeaGreen);
+            AddPlateToShelf(23, 2, Brushes.MediumSeaGreen);
+            AddPlateToShelf(21, 3, Brushes.Coral);
+            AddPlateToShelf(24, 3, Brushes.Coral);
+            AddPlateToShelf(23, 3, Brushes.Coral);
+            AddPlateToShelf(22, 3, Brushes.Coral);
+        }
+
+        private void TitleBar_MouseDown(object sender, EventArgs e)
+        {
+            this.DragMove();
         }
     }
 }

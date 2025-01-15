@@ -150,13 +150,13 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="60*"/>
             <ColumnDefinition Width="10*"/>
             <ColumnDefinition Width="10*"/>
             <ColumnDefinition Width="Auto"/>
         </Grid.ColumnDefinitions>
 
-        <Rectangle Grid.Row="0" Grid.ColumnSpan="4" Fill="SlateGray"/>
+        <Rectangle Grid.Row="0" Grid.ColumnSpan="4" Fill="SlateGray" MouseDown="TitleBar_MouseDown"/>
         <DockPanel Grid.Column="3" HorizontalAlignment="Stretch"
            VerticalAlignment="Stretch"
            LastChildFill="True">
@@ -212,14 +212,14 @@
             </StackPanel>       
         </DockPanel>
 
-        <Viewbox x:Name="StackerGridViewbox" Grid.Column="0" Grid.Row="1" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
-            <Grid x:Name="StackerGrid" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+        <Viewbox x:Name="StackerGridViewbox" Grid.Column="0" Grid.Row="1" HorizontalAlignment="Left" VerticalAlignment="Center">
+            <Grid x:Name="StackerGrid" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Margin="0,20,0,20">
                 <!-- Stacks will be added here programmatically -->
             </Grid>
         </Viewbox>
         <!-- Add other UI elements in the second row -->
         <!-- New UI elements for creating a run -->
-        <Grid Grid.Row="1" Grid.Column="1" HorizontalAlignment="Left" Margin="243,15,0,240" Width="311">
+        <Grid Grid.Row="1" Grid.Column="1" HorizontalAlignment="Left">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
@@ -228,31 +228,31 @@
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
             <StackPanel Grid.Row="0" Orientation="Horizontal" >
-                <Label Content="Run ID:" VerticalAlignment="Center" />
+                <Label Content="Run ID:" VerticalAlignment="Stretch" />
                 <TextBox x:Name="txtRunID" HorizontalAlignment="Stretch" />
             </StackPanel>
             <StackPanel Grid.Row="1" Orientation="Horizontal" >
-                <Label Content="Screen Number:" VerticalAlignment="Center" />
+                <Label Content="Screen Number:" VerticalAlignment="Stretch" />
                 <TextBox x:Name="txtScreenNumber" />
             </StackPanel>
             <StackPanel Grid.Row="2" Orientation="Horizontal" >
-                <Label Content="User Name:" VerticalAlignment="Center" />
+                <Label Content="User Name:" VerticalAlignment="Stretch" />
                 <TextBox x:Name="txtUserName" />
             </StackPanel>
             <StackPanel Grid.Row="3" Orientation="Horizontal" >
-                <Label Content="Current Script Line:" VerticalAlignment="Center" />
+                <Label Content="Current Script Line:" VerticalAlignment="Stretch" />
                 <TextBox x:Name="txtCurrentScriptLine" />
             </StackPanel>
             <Button Grid.Row="1" x:Name="btnCreateRun" Margin="5" Padding="5" Content="Create Run" Click="btnCreateRun_Click" />
         </Grid>
-        <Button x:Name="RunCommandsButton" Content="Run Commands" HorizontalAlignment="Left" Margin="643,101,0,0" Grid.Row="1" Grid.Column="1" VerticalAlignment="Top" Click="RunCommandsButton_Click"/>
-        <Button x:Name="CancelButton" Content="Pause" HorizontalAlignment="Left" Margin="648,143,0,0" Grid.Row="1" Grid.Column="1" VerticalAlignment="Top" Click="CancelButton_Click" IsEnabled="False"/>
-        <ScrollViewer VerticalScrollBarVisibility="Auto" Name="StatusScrollViewer" Grid.Row="1" Grid.Column="1" Margin="-21,158,21,0" VerticalAlignment="Top" Height="240" Width="800">
+        <Button x:Name="RunCommandsButton" Content="Run Commands" HorizontalAlignment="Left" Grid.Row="1" Grid.Column="1" VerticalAlignment="Stretch" Click="RunCommandsButton_Click"/>
+        <Button x:Name="CancelButton" Content="Pause" HorizontalAlignment="Left" Grid.Row="1" Grid.Column="1" VerticalAlignment="Stretch" Click="CancelButton_Click" IsEnabled="False"/>
+        <ScrollViewer VerticalScrollBarVisibility="Auto" Name="StatusScrollViewer" Grid.Row="1" Grid.Column="1" VerticalAlignment="Stretch">
             <TextBlock x:Name="StatusTextBlock" 
                TextWrapping="Wrap" 
                VerticalAlignment="Stretch" 
                HorizontalAlignment="Left"/>
         </ScrollViewer>
-        <Button Content="ResumeButton" HorizontalAlignment="Left" Margin="692,143,0,0" Grid.Row="1" Grid.Column="1" VerticalAlignment="Top" Click="ResumeButton_Click"/>
+        <Button Content="ResumeButton" HorizontalAlignment="Left" Grid.Row="1" Grid.Column="1" VerticalAlignment="Stretch" Click="ResumeButton_Click"/>
     </Grid>
 </Window>
