@@ -11,6 +11,7 @@ using System.Runtime.CompilerServices;
 using System.Linq;
 using System.CodeDom.Compiler;
 using System.ComponentModel.Design;
+using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace Integration
 {
@@ -189,7 +190,7 @@ namespace Integration
         public string Type { get; set; }
         public bool Lidded { get; set; }
     }
-    public class RunInfo
+    public class RunInfo : ObservableObject
     {
         public string RunID { get; set; }
         public DateTime TimeRun { get; set; }

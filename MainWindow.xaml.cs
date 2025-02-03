@@ -2,6 +2,7 @@
 using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.ComponentModel.Design;
 using System.Data.Entity.Core.Common.CommandTrees.ExpressionBuilder;
@@ -19,14 +20,18 @@ using System.Windows.Media;
 using System.Windows.Media.Media3D;
 using System.Windows.Shapes;
 using System.Windows.Threading;
+using CommunityToolkit.Mvvm.Input;
 using Integration;
 using RCAPINet;
 using static Integration.InstrumentEvents;
 using static Integration.RunLogger;
+using CommunityToolkit.Mvvm;
+using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace PinTransferWPF
 {
     using StackType = HotelStacker;
+    [INotifyPropertyChanged]
     public partial class MainWindow : Window
     {
         MessageBoxResult messageBoxResult;
@@ -47,7 +52,7 @@ namespace PinTransferWPF
         public MainWindow()
         {
             InitializeComponent();
-
+            this.DataContext = this;
             // Define grid rows and columns
             for (int i = 0; i < 3; i++)
             {
@@ -545,7 +550,22 @@ namespace PinTransferWPF
             };
         }
 
-        private void btnCreateRun_Click(object sender, RoutedEventArgs e)
+        RunInfo runInfo = new RunInfo
+        {
+            RunID = null,
+            TimeRun = DateTime.Now,
+            ScreenNumber = -1,
+            UserName = "Bryce",
+            JournalID = "testJournal"
+        };
+        public string RunID { get; set; } = null;
+        public DateTime TimeRun { get; set; } = DateTime.Now;
+        public int ScreenNumber { get; set; } = -1;
+        public string UserName { get; set; } = "Bryce";
+        public string JournalID { get; set; } = "testJournal";
+
+        [RelayCommand]
+        private void CreateRun()
         {
             int StartingStack;
             int FinalStack;
@@ -635,14 +655,7 @@ namespace PinTransferWPF
                     SourcePlates = SourcePlates,
                     DestinationPlates = DestinationPlates
                 };
-                RunInfo runInfo = new RunInfo
-                {
-                    RunID = null,
-                    TimeRun = DateTime.Now,
-                    ScreenNumber = -1,
-                    UserName = "Bryce",
-                    JournalID = "testJournal"
-                };
+
                 _runLogger.CreateJournal(journalInfo);
                 _runLogger.CreateRun(runInfo);
 
@@ -681,7 +694,9 @@ namespace PinTransferWPF
                 _carousel.AddPlate(plate, plate.Stack);
             }
         }
-        private async void RunCommandsButton_Click(object sender, RoutedEventArgs e)
+
+        [RelayCommand]
+        private async void StartRun()
         {
             if (Parameters.UsingInstruments)
             {
@@ -714,7 +729,7 @@ namespace PinTransferWPF
             try
             {
                 await Task.WhenAll(
-                    //_epsonRunner.RunCommandsAsync(currentJournalID, 1, _cts.Token),
+                    _epsonRunner.RunCommandsAsync(currentJournalID, 1, _cts.Token),
                     _kx2Runner.RunCommandsAsync(currentJournalID, 1, _cts.Token)
                 );
             }
@@ -738,7 +753,8 @@ namespace PinTransferWPF
             }
         }
 
-        private async void ResumeButton_Click(object sender, RoutedEventArgs e)
+        [RelayCommand]
+        private async void ResumeRun()
         {
             var lastRunState = _runLogger.LoadRunState("testJournal"); // TODO: Replace with actual journal ID
             if (Parameters.UsingInstruments)
@@ -754,7 +770,8 @@ namespace PinTransferWPF
             ResumeRun(lastRunState);
         }
 
-        private async void CancelButton_Click(object sender, RoutedEventArgs e)
+        [RelayCommand]
+        private async void CancelRun()
         {
             CancelButton.IsEnabled = false;
             StatusTextBlock.Text += "Cancelling...";
@@ -766,40 +783,69 @@ namespace PinTransferWPF
             }
         }
 
-        private void toolsComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        [ObservableProperty]
+        private ObservableCollection<string> fileOptions = new ObservableCollection<string>
         {
-            if (toolsComboBox.SelectedIndex == 0) // "Open New Menu" option
+            "Save Script",
+            "Load Script"
+        };
+
+        [ObservableProperty]
+        private string selectedFileOption;
+
+        partial void OnSelectedFileOptionChanged(string value)
+        {
+            if (value == "Save Script")
             {
-                LabwareDefinitionsWindow labwareDefinitionsWindow = new LabwareDefinitionsWindow("Data Source=" + Parameters.LabwareDatabase);
-                labwareDefinitionsWindow.ShowDialog();
-                toolsComboBox.SelectedIndex = -1;
+                OpenSaveScriptWindow();
+            }
+            else if (value == "Load Script")
+            {
+                OpenLoadScriptWindow();
             }
         }
 
-        private void fileComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        private void OpenSaveScriptWindow()
         {
-            if (toolsComboBox.SelectedIndex == 0) // "Open New Menu" option
-            {
+            // Logic to open Save Script window
+        }
 
+        private void OpenLoadScriptWindow()
+        {
+            // Logic to open Load Script window
+        }
+
+        [ObservableProperty]
+        private ObservableCollection<string> toolOptions = new ObservableCollection<string>
+        {
+            "Labware Manager"
+        };
+
+        [ObservableProperty]
+        private string selectedToolOption;
+
+        partial void OnSelectedToolOptionChanged(string value)
+        {
+            if (value == "Labware Manager")
+            {
+                OpenLabware();
             }
         }
 
-        private void tools_Clicked(object sender, RoutedEventArgs e)
+        private void OpenLabware()
         {
-            toolsComboBox.IsDropDownOpen = !toolsComboBox.IsDropDownOpen;
+            LabwareDefinitionsWindow labwareDefinitionsWindow = new LabwareDefinitionsWindow("Data Source=" + Parameters.LabwareDatabase);
+            labwareDefinitionsWindow.ShowDialog();
         }
 
-        private void file_Clicked(object sender, RoutedEventArgs e)
-        {
-            fileComboBox.IsDropDownOpen = !fileComboBox.IsDropDownOpen;
-        }
-
-        private void MinimizeWindow(object sender, RoutedEventArgs e)
+        [RelayCommand]
+        private void MinimizeWindow()
         {
             this.WindowState = WindowState.Minimized;
         }
 
-        private void MaximizeClick(object sender, RoutedEventArgs e)
+        [RelayCommand]
+        private void MaximizeWindow()
         {
             if (this.WindowState == WindowState.Maximized)
             {
@@ -813,7 +859,8 @@ namespace PinTransferWPF
             }
         }
 
-        private void CloseWindow(object sender, RoutedEventArgs e)
+        [RelayCommand]
+        private void CloseWindow()
         {
             this.Close();
         }

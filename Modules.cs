@@ -61,7 +61,7 @@ namespace Integration
 
     // Update the Plate class to include JsonConverter attribute
     [JsonConverter(typeof(PlateConverter))]
-    public class Plate : ObservableObject
+    public class Plate
     {
         private Dictionary<string, bool> _status;
         public Dictionary<string, bool> Status
@@ -72,7 +72,7 @@ namespace Integration
                 if (value != _status)
                 {
                     _status = value;
-                    OnPropertyChanged(nameof(Status));
+                    //OnPropertyChanged(nameof(Status));
                 }
             }
         }
@@ -86,7 +86,7 @@ namespace Integration
                 if (value != _id)
                 {
                     _id = value;
-                    OnPropertyChanged(nameof(ID));
+                    //OnPropertyChanged(nameof(ID));
                 }
             }
         }
@@ -100,7 +100,7 @@ namespace Integration
                 if (value != _stack)
                 {
                     _stack = value;
-                    OnPropertyChanged(nameof(Stack));
+                    //OnPropertyChanged(nameof(Stack));
                 }
             }
         }
@@ -114,7 +114,7 @@ namespace Integration
                 if (value != _finalStack)
                 {
                     _finalStack = value;
-                    OnPropertyChanged(nameof(FinalStack));
+                    //OnPropertyChanged(nameof(FinalStack));
                 }
             }
         }
@@ -128,7 +128,7 @@ namespace Integration
                 if (value != _positionInStack)
                 {
                     _positionInStack = value;
-                    OnPropertyChanged(nameof(PositionInStack));
+                    //OnPropertyChanged(nameof(PositionInStack));
                 }
             }
         }
@@ -142,7 +142,7 @@ namespace Integration
                 if (value != _finalPositionInStack)
                 {
                     _finalPositionInStack = value;
-                    OnPropertyChanged(nameof(FinalPositionInStack));
+                    //OnPropertyChanged(nameof(FinalPositionInStack));
                 }
             }
         }
