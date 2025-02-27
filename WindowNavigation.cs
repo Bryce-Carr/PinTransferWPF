@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace PinTransferWPF
 {
-    public class WindowNavigation
+    internal class WindowNavigation
     {
     }
 }

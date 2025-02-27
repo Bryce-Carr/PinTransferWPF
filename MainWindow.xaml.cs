@@ -27,12 +27,16 @@ using static Integration.InstrumentEvents;
 using static Integration.RunLogger;
 using CommunityToolkit.Mvvm;
 using CommunityToolkit.Mvvm.ComponentModel;
+<<<<<<< HEAD
 using ViewModels;
 using PinTransferParameters;
 using System.Collections.Specialized;
 using System.Data.Common;
 using System.Windows.Controls.Primitives;
+
 using System.Net.Sockets;
+=======
+>>>>>>> parent of f9bdf3a (finished ability to add new source/replicate plates, linked to visual stacker, working on moving plates)
 
 namespace PinTransferWPF
 {
@@ -40,80 +44,25 @@ namespace PinTransferWPF
     [INotifyPropertyChanged]
     public partial class MainWindow : Window
     {
-        public MainViewModel ViewModel { get; }
         MessageBoxResult messageBoxResult;
-        private InstrumentController _instrumentController;
+        private InstrumentController InstrumentController;
+        private readonly InstrumentEvents _events;
+        private JournalParser<StackType> _parser;
+        private CommandRunner<StackType> _epsonRunner;
+        private CommandRunner<StackType> _kx2Runner;
+        private RunLogger _runLogger;
+        private readonly Carousel<StackType> _carousel;
+        private CancellationTokenSource _cts;
+        private int _numStacks;
+        private int _stackCapacity;
         private DispatcherTimer resizeTimer;
         private Dictionary<(int, int), Grid> Shelves = new Dictionary<(int, int), Grid>();
-        private SolidColorBrush selectedPlateColor = new SolidColorBrush();
-        private SolidColorBrush unselectedPlateColor = new SolidColorBrush();
-        private SolidColorBrush primaryColor = new SolidColorBrush();
-        private SolidColorBrush secondaryColor = new SolidColorBrush();
-        private SolidColorBrush accentColor = new SolidColorBrush();
-        private SolidColorBrush backgroundColor = new SolidColorBrush();
-        private SolidColorBrush secondaryBackgroundColor = new SolidColorBrush();
-        private SolidColorBrush foregroundColor = new SolidColorBrush();
-        int Rows = 26; //shelves + 1 for labels
-        int Columns = 6;
-        int Offset = 3;
+
 
         public MainWindow()
         {
-            //selectedPlate.Color = (Color)ColorConverter.ConvertFromString("#F37AA5");
-            //unselectedPlate.Color = (Color)ColorConverter.ConvertFromString("#C9C1C5");
             InitializeComponent();
-            primaryColor.Color = (Color)FindResource("PrimaryColor");
-            secondaryColor.Color = (Color)FindResource("SecondaryColor");
-            accentColor.Color = (Color)FindResource("AccentColor");
-            backgroundColor.Color = (Color)FindResource("BackgroundColor");
-            secondaryBackgroundColor.Color = (Color)FindResource("SecondaryBackgroundColor");
-            foregroundColor.Color = (Color)FindResource("ForegroundColor");
-
-            selectedPlateColor.Color = (Color)FindResource("PrimaryColor");
-            unselectedPlateColor.Color = (Color)FindResource("SecondaryColor");
-            _instrumentController = new InstrumentController(this);
-            if (Parameters.UsingInstruments)
-            {
-                _instrumentController.InitializeAllDevices();
-
-                this.Closing += new CancelEventHandler(MainWindow_Closing);
-
-                void MainWindow_Closing(object sender, CancelEventArgs e)
-                {
-                    _instrumentController.OnShutdown();
-                }
-            }
-
-            string connectionString = "Data Source=" + Parameters.LoggingDatabase;
-            ViewModel = new MainViewModel(_instrumentController,
-                                          connectionString);
-            DataContext = ViewModel;
-
-            // Subscribe to the CloseWindowRequested event
-            ViewModel.CloseWindowRequested += (sender, args) => this.Close();
-
-            // Subscribe to the MaximizeWindowRequested event
-            ViewModel.MaximizeWindowRequested += (sender, args) => MaximizeWindow(ViewModel);
-
-            // Subscribe to the MinimizeWindowRequested event
-            ViewModel.MinimizeWindowRequested += (sender, args) => this.WindowState = WindowState.Minimized;
-
-            // Subscribe to the OpenLabwareRequested event
-            ViewModel.OpenLabwareRequested += (sender, args) => OpenLabware();
-
-            // Subscribe to the WindowDragRequested event
-            WindowDragRequested += (sender, args) => this.DragMove();
-
-            // Subscribe to the PlateSelected event
-            PlateSelected += SelectPlate;
-
-            // Bind the Window's StateChanged event to update the ViewModel
-            StateChanged += (sender, args) => ViewModel.WindowState = WindowState;
-
-            //Subscribe to plates changing
-            ViewModel.SourcePlates.CollectionChanged += OnPlatesChanged;
-            ViewModel.DestinationPlates.CollectionChanged += OnPlatesChanged;
-
+            this.DataContext = this;
             // Define grid rows and columns
             for (int i = 0; i < 3; i++)
             {
@@ -124,6 +73,42 @@ namespace PinTransferWPF
             CreateMicroplateStacker();
             SizeChanged += MainWindow_SizeChanged;
 
+            InstrumentController = new InstrumentController(this);
+            if (Parameters.UsingInstruments)
+            {
+                InstrumentController.InitializeAllDevices();
+
+                this.Closing += new CancelEventHandler(MainWindow_Closing);
+
+                void MainWindow_Closing(object sender, CancelEventArgs e)
+                {
+
+                    InstrumentController.OnShutdown();
+                }
+            }
+
+
+            string connectionString = "Data Source=" + Parameters.LoggingDatabase;
+            _events = new InstrumentEvents();
+            _numStacks = Parameters.numStacks;
+            _stackCapacity = 25; // TODO: replace this with a function that will determine stack capacity if using sequential stackers
+            Func<int, StackType> stackerFactory = _stackCapacity => new StackType(_stackCapacity);
+            _carousel = new Carousel<StackType>(_numStacks, _stackCapacity, stackerFactory);
+
+            _runLogger = new RunLogger(connectionString);
+            _parser = new JournalParser<StackType>(connectionString, _events, _carousel);
+            _epsonRunner = new CommandRunner<StackType>(_parser, "Epson", _runLogger, _events);
+            _kx2Runner = new CommandRunner<StackType>(_parser, "KX2", _runLogger, _events);
+            if (Parameters.UsingInstruments)
+            {
+                SetupEventHandlers();
+            }
+            else
+            {
+                SetupEventHandlersText();
+            }
+            CheckForUnfinishedRun(connectionString);
+
             this.Loaded += MainWindow_Loaded;
             SizeChanged += MainWindow_SizeChanged;
 
@@ -132,23 +117,768 @@ namespace PinTransferWPF
             resizeTimer.Interval = TimeSpan.FromMilliseconds(250);
             resizeTimer.Tick += ResizeTimer_Tick;
         }
-
         private void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
             // Delay the initial creation slightly to ensure the control has been rendered
             resizeTimer.Start();
         }
+        private void CheckForUnfinishedRun(string connectionString)
+        {
+            var lastUnfinishedRunState = _runLogger.LoadMostRecentUnfinishedRunState();
+            if (lastUnfinishedRunState != null)
+            {
+                var result = MessageBox.Show($"Last run (Journal ID: {lastUnfinishedRunState.JournalID}) wasn't finished. Do you want to resume?", "Resume Run", MessageBoxButton.YesNo);
+                if (result == MessageBoxResult.Yes)
+                {
+                    ResumeRun(lastUnfinishedRunState);
+                }
+            }
+        }
+
+        private async void ResumeRun(RunState runState)
+        {
+            // make carousel from saved plate positions
+            _events.DeserializeToolStates(runState.SerializedToolStates);
+            _events.DeserializeArmStates(runState.SerializedArmStates);
+            _events.DeserializeStageStates(runState.SerializedStageStates);
+            _events.DeserializeCarouselStates(runState.SerializedCarouselStates);
+            string serializedPlates = runState.Plates;
+            List<Plate> deserializedPlates = PlateSerializer.DeserializePlates(serializedPlates);
+            PopulateCarousel(deserializedPlates);
+            _events._plates = deserializedPlates;
+            _events.ResumeLine = runState.ResumeLine;
+
+            RunCommandsButton.IsEnabled = false;
+            CancelButton.IsEnabled = true;
+            StatusTextBlock.Text = string.Empty;
+            AppendStatus($"Resuming run for Journal ID: {runState.JournalID}...");
+
+            _cts = new CancellationTokenSource();
+
+            try
+            {
+                await Task.WhenAll(
+                    _epsonRunner.RunCommandsAsync(runState.JournalID, runState.EpsonCommandID, _cts.Token),
+                    _kx2Runner.RunCommandsAsync(runState.JournalID, runState.KX2CommandID, _cts.Token)
+                );
+            }
+            catch (OperationCanceledException)
+            {
+                AppendStatus("Command execution was cancelled.");
+            }
+            catch (Exception ex)
+            {
+                AppendStatus($"An error occurred: {ex.Message}");
+            }
+            finally
+            {
+                if (!_cts.Token.IsCancellationRequested)
+                {
+                    AppendStatus("All commands completed successfully.");
+                    _runLogger.MarkRunAsCompleted(runState.JournalID);
+                }
+                RunCommandsButton.IsEnabled = true;
+                CancelButton.IsEnabled = false;
+            }
+        }
+
+        private void AppendStatus(string message)
+        {
+            Dispatcher.InvokeAsync(() =>
+            {
+                StatusTextBlock.Text += $"{DateTime.Now:HH:mm:ss} - {message}\n";
+                StatusScrollViewer.ScrollToVerticalOffset(StatusScrollViewer.ScrollableHeight);
+            });
+        }
+
+        private void SetupEventHandlers()
+        {
+            //TODO add appropriate checks before opening grippers, etc..
+            short ret;
+            int timeout = 0;
+            byte index = 0;
+            short errorCode = 0;
+
+            // Clamps
+            _events.OnClampsStateChanged += async (state, ct) =>
+            {
+                ct.ThrowIfCancellationRequested();
+                AppendStatus($"Clamps {state}");
+                await Task.Run(() =>
+                {
+                    if (state == "open")
+                    {
+                        InstrumentController.m_spel.Call("OpenClamps");
+                    }
+                    else if (state == "close")
+                    {
+                        InstrumentController.m_spel.Call("CloseClamps");
+                    }
+                });
+            };
+
+            // Epson
+            _events.OnToolAttached += async (toolId, ct) =>
+            {
+                ct.ThrowIfCancellationRequested();
+                AppendStatus($"Attaching {toolId}");
+                await Task.Run(() =>
+                {
+                    switch (toolId)
+                    {
+                        case "33":
+                            InstrumentController.m_spel.Call("AttachSM");
+                            break;
+                        case "100":
+                            InstrumentController.m_spel.Call("AttachMD");
+                            break;
+                        case "300":
+                            InstrumentController.m_spel.Call("AttachLG");
+                            break;
+                        case "96":
+                            InstrumentController.m_spel.Call("Attach96");
+                            break;
+                    }
+                });
+            };
+
+            _events.OnToolDetached += async (toolId, ct) =>
+            {
+                ct.ThrowIfCancellationRequested();
+                AppendStatus($"Detaching {toolId}");
+                await Task.Run(() =>
+                {
+                    switch (toolId)
+                    {
+                        case "33":
+                            InstrumentController.m_spel.Call("DetachSM");
+                            break;
+                        case "100":
+                            InstrumentController.m_spel.Call("DetachMD");
+                            break;
+                        case "300":
+                            InstrumentController.m_spel.Call("DetachLG");
+                            break;
+                        case "96":
+                            InstrumentController.m_spel.Call("Detach96");
+                            break;
+                    }
+                });
+            };
+
+            _events.OnWashCompleted += async (toolId, ct) =>
+            {
+                ct.ThrowIfCancellationRequested();
+                AppendStatus($"Washing {toolId}");
+                await Task.Run(() =>
+                {
+                    if (Parameters.Testing)
+                    {
+                        InstrumentController.m_spel.Call("WashFake");
+                    }
+                    else
+                    {
+                        switch (toolId)
+                        {
+                            case "33":
+                                InstrumentController.m_spel.Call("WashSM");
+                                break;
+                            case "100":
+                                InstrumentController.m_spel.Call("WashMD");
+                                break;
+                            case "300":
+                                InstrumentController.m_spel.Call("WashLG");
+                                break;
+                            case "96":
+                                InstrumentController.m_spel.Call("Wash96");
+                                break;
+                        }
+                    }
+                });
+            };
+
+            _events.OnTransferCompleted += async (toolId, ct) =>
+            {
+                ct.ThrowIfCancellationRequested();
+                AppendStatus($"Transfering {toolId}");
+                await Task.Run(() =>
+                {
+                    switch (toolId)
+                    {
+                        case "33":
+                            InstrumentController.m_spel.Call("TransferSM");
+                            break;
+                        case "100":
+                            InstrumentController.m_spel.Call("TransferMD");
+                            break;
+                        case "300":
+                            InstrumentController.m_spel.Call("TransferLG");
+                            break;
+                        case "96":
+                            InstrumentController.m_spel.Call("Transfer96");
+                            break;
+                    }
+                });
+            };
+
+            _events.OnToolSafe += async (toolId, ct) =>
+            {
+                ct.ThrowIfCancellationRequested();
+                AppendStatus($"Safe Move {toolId}");
+                await Task.Run(() =>
+                {
+                    InstrumentController.m_spel.Call("MoveSafe");
+                });
+            };
+
+            //KX2
+            _events.OnArmSafe += async (ct) =>
+            {
+                ct.ThrowIfCancellationRequested();
+                AppendStatus($"Safe Move for Arm");
+                await Task.Run(() =>
+                {
+                    InstrumentController.MovetoTeachPoint("SafeLow");
+                });
+            };
+
+            _events.OnArmHome += async (ct) =>
+            {
+                ct.ThrowIfCancellationRequested();
+                AppendStatus($"Arm homed");
+                await Task.Run(() =>
+                {
+                    InstrumentController.KX2.WarningIdleStartTimeUpdate(); //Suppress warning/buzzer
+                    ret = InstrumentController.KX2.TeachPointMoveTo("Home", Parameters.HomeArmSpeed, Parameters.ArmAccel, true, TimeoutMsec: ref timeout, SendEventWhenMoveDone: false, Index: ref index);
+                });
+            };
+
+            _events.OnPlateGrabbedFromSequential += async (plateID, ct) =>
+            {
+                ct.ThrowIfCancellationRequested();
+                AppendStatus($"{plateID} grabbed from hotel");
+                await Task.Run(() =>
+                {
+                    // TODO
+                });
+            };
+
+            _events.OnPlateGrabbedFromHotel += async (plateID, location, ct) =>
+            {
+                ct.ThrowIfCancellationRequested();
+                AppendStatus($"{plateID} grabbed from hotel location {location}");
+                await Task.Run(() =>
+                {
+                    if (_events.ResumeLine == 0)
+                    {
+                        errorCode = InstrumentController.GetPlateFromStack(plateID, (short)_stackCapacity, (short)location);
+                    }
+                    else
+                    {
+                        errorCode = InstrumentController.GetPlateFromStack(plateID, (short)_stackCapacity, (short)location, (short)_events.ResumeLine);
+                    }
+                    Int32.TryParse(InstrumentController.KX2.GetErrorCode(2), out _events.ResumeLine);
+                });
+            };
+
+            _events.OnPlateGrabbedFromStage += async (plateID, ct) =>
+            {
+                ct.ThrowIfCancellationRequested();
+                AppendStatus($"{plateID} grabbed from stage");
+                await Task.Run(() =>
+                {
+                    if (_events.ResumeLine == 0)
+                    {
+                        errorCode = InstrumentController.GetPlateFromStage(plateID);
+                    }
+                    else
+                    {
+                        errorCode = InstrumentController.GetPlateFromStage(plateID, (short)_events.ResumeLine);
+                    }
+                    Int32.TryParse(InstrumentController.KX2.GetErrorCode(2), out _events.ResumeLine);
+                });
+            };
+
+            _events.OnPlatePlacedToStack += async (plateID, location, ct) =>
+            {
+                ct.ThrowIfCancellationRequested();
+                AppendStatus($"{plateID} placed to hotel location {location}");
+                await Task.Run(() =>
+                {
+                    if (_events.ResumeLine == 0)
+                    {
+                        errorCode = InstrumentController.SetPlateToStack(plateID, (short)_stackCapacity, (short)location);
+                    }
+                    else
+                    {
+                        errorCode = InstrumentController.SetPlateToStack(plateID, (short)_stackCapacity, (short)location, (short)_events.ResumeLine);
+                    }
+                    Int32.TryParse(InstrumentController.KX2.GetErrorCode(2), out _events.ResumeLine);
+                });
+            };
+
+            _events.OnPlatePlacedToStage += async (plateID, ct) =>
+            {
+                ct.ThrowIfCancellationRequested();
+                AppendStatus($"{plateID} placed to stage");
+                await Task.Run(() =>
+                {
+                    if (_events.ResumeLine == 0)
+                    {
+                        errorCode = InstrumentController.SetPlateToStage(plateID);
+                    }
+                    else
+                    {
+                        errorCode = InstrumentController.SetPlateToStage(plateID, (short)_events.ResumeLine);
+                    }
+                    Int32.TryParse(InstrumentController.KX2.GetErrorCode(2), out _events.ResumeLine);
+                });
+            };
+
+            // Carousel
+            _events.OnCarouselRotated += async (stacker, plateType, ct) =>
+            {
+                ct.ThrowIfCancellationRequested();
+                AppendStatus($"Carousel rotated to {stacker}");
+                await Task.Run(() =>
+                {
+                    InstrumentController.RotateCarousel(stacker, plateType);
+                });
+            };
+        }
+
+        private void SetupEventHandlersText()
+        {
+            // Clamps
+            _events.OnClampsStateChanged += async (state, ct) =>
+            {
+                ct.ThrowIfCancellationRequested();
+                AppendStatus($"Clamps {state}");
+                if (state == "open")
+                {
+                    // open clamps
+                }
+                else if (state == "close")
+                {
+                    // close clamps
+                }
+                await Task.Delay(1000, ct);
+            };
+
+            // Epson
+            _events.OnToolAttached += async (toolId, ct) =>
+            {
+                ct.ThrowIfCancellationRequested();
+                AppendStatus($"Tool {toolId} attached");
+                await Task.Delay(1000, ct);
+            };
+
+            _events.OnToolDetached += async (toolId, ct) =>
+            {
+                ct.ThrowIfCancellationRequested();
+                AppendStatus($"Tool {toolId} detached");
+                await Task.Delay(1000, ct);
+            };
+
+            _events.OnWashCompleted += async (toolId, ct) =>
+            {
+                ct.ThrowIfCancellationRequested();
+                AppendStatus($"Wash for Tool {toolId}");
+                await Task.Delay(2000, ct);
+            };
+
+            _events.OnTransferCompleted += async (toolId, ct) =>
+            {
+                ct.ThrowIfCancellationRequested();
+                AppendStatus($"Transfer for Tool {toolId}");
+                await Task.Delay(1500, ct);
+            };
+
+            _events.OnToolSafe += async (toolId, ct) =>
+            {
+                ct.ThrowIfCancellationRequested();
+                AppendStatus($"Safe Move for Tool {toolId}");
+                await Task.Delay(1000, ct);
+            };
+
+            //KX2
+            _events.OnArmSafe += async (ct) =>
+            {
+                ct.ThrowIfCancellationRequested();
+                AppendStatus($"Safe Move for Arm");
+                await Task.Delay(1000, ct);
+            };
+
+            _events.OnArmHome += async (ct) =>
+            {
+                ct.ThrowIfCancellationRequested();
+                AppendStatus($"Arm homed");
+                await Task.Delay(1000, ct);
+            };
+
+            _events.OnPlateGrabbedFromSequential += async (plateID, ct) =>
+            {
+                ct.ThrowIfCancellationRequested();
+                AppendStatus($"{plateID} grabbed from hotel");
+                await Task.Delay(2000, ct);
+            };
+
+            _events.OnPlateGrabbedFromHotel += async (plateID, location, ct) =>
+            {
+                ct.ThrowIfCancellationRequested();
+                AppendStatus($"{plateID} grabbed from hotel location {location}");
+                await Task.Delay(2000, ct);
+            };
+
+            _events.OnPlateGrabbedFromStage += async (plateID, ct) =>
+            {
+                ct.ThrowIfCancellationRequested();
+                AppendStatus($"{plateID} grabbed from stage");
+                await Task.Delay(2000, ct);
+            };
+
+            _events.OnPlatePlacedToStack += async (plateID, location, ct) =>
+            {
+                ct.ThrowIfCancellationRequested();
+                AppendStatus($"{plateID} placed to hotel location {location}");
+                await Task.Delay(2000, ct);
+            };
+
+            _events.OnPlatePlacedToStage += async (plateID, ct) =>
+            {
+                ct.ThrowIfCancellationRequested();
+                AppendStatus($"{plateID} placed to stage");
+                await Task.Delay(2000, ct);
+            };
+
+            // Carousel
+            _events.OnCarouselRotated += async (stacker, plateType, ct) =>
+            {
+                ct.ThrowIfCancellationRequested();
+                AppendStatus($"Carousel rotated to {stacker}");
+                await Task.Delay(2000, ct);
+            };
+        }
+
+        RunInfo runInfo = new RunInfo
+        {
+            RunID = null,
+            TimeRun = DateTime.Now,
+            ScreenNumber = -1,
+            UserName = "Bryce",
+            JournalID = "testJournal"
+        };
+        public string RunID { get; set; } = null;
+        public DateTime TimeRun { get; set; } = DateTime.Now;
+        public int ScreenNumber { get; set; } = -1;
+        public string UserName { get; set; } = "Bryce";
+        public string JournalID { get; set; } = "testJournal";
+
+        [RelayCommand]
+        private void CreateRun()
+        {
+            int StartingStack;
+            int FinalStack;
+            int StartingPosition;
+            int FinalPosition;
+            //TODO fix sequential logic
+            try
+            {
+                List<SourcePlate> SourcePlates = new List<SourcePlate>();
+                List<DestinationPlate> DestinationPlates = new List<DestinationPlate>();
+                for (int sourceCount = 1; sourceCount < 3; sourceCount++)
+                {
+                    StartingStack = Math.Abs(sourceCount - 1) / _stackCapacity + 1;
+                    FinalStack = StartingStack;
+                    StartingPosition = sourceCount;
+                    FinalPosition = StartingPosition;
+                    if (typeof(StackType) == typeof(HotelStacker))
+                    {
+                        FinalStack = StartingStack;
+                        FinalPosition = sourceCount;
+                    }
+                    else if (typeof(StackType) == typeof(SequentialStacker))
+                    {
+                        FinalStack = StartingStack * 2;
+                        FinalPosition = sourceCount - ((FinalStack - 1) * _stackCapacity);
+                        if (FinalStack > _numStacks)
+                        {
+                            throw new InvalidOperationException("Too many plates...");
+                        }
+                    }
+                    SourcePlates.Add(new SourcePlate
+                    {
+                        ID = "source_" + sourceCount.ToString(),
+                        Stack = StartingStack,
+                        FinalStack = FinalStack,
+                        PositionInStack = sourceCount,
+                        FinalPositionInStack = FinalPosition,
+                        Status = new Dictionary<string, bool>()
+                        {
+                            { "pinned", false }
+                        },
+                        Replicates = new Tuple<int, int>(100, 2)
+                    });
+                }
+                foreach (var sourcePlate in SourcePlates)
+                {
+                    for (int replicate = 1; replicate <= sourcePlate.Replicates.Item2; replicate++)
+                    {
+                        StartingStack = _numStacks - ((Math.Abs(DestinationPlates.Count - 1) / _stackCapacity));
+                        FinalStack = StartingStack;
+                        StartingPosition = DestinationPlates.Count() + 1 - ((_numStacks - StartingStack) * _stackCapacity);
+                        FinalPosition = StartingPosition;
+                        if (typeof(StackType) == typeof(HotelStacker))
+                        {
+                            FinalStack = StartingStack;
+                            FinalPosition = StartingPosition;
+                        }
+                        else if (typeof(StackType) == typeof(SequentialStacker))
+                        {
+                            FinalStack = _numStacks - ((Math.Abs(DestinationPlates.Count - 1) / _stackCapacity) * 2);
+                            FinalPosition = DestinationPlates.Count() + 1 - ((_numStacks - FinalStack) * _stackCapacity);
+                            if (FinalStack > _numStacks)
+                            {
+                                throw new InvalidOperationException("Too many plates.");
+                            }
+                        }
+                        DestinationPlates.Add(new DestinationPlate
+                        {
+                            ID = "destination_" + (DestinationPlates.Count() + 1).ToString(),
+                            Stack = StartingStack,
+                            FinalStack = FinalStack,
+                            PositionInStack = StartingPosition,
+                            FinalPositionInStack = FinalPosition,
+                            Status = new Dictionary<string, bool>()
+                            {
+                                { "pinned", false }
+                            }
+
+                        });
+                        DestinationPlate plate = DestinationPlates.Find(dp => dp.ID == "destination_" + (DestinationPlates.Count()).ToString());
+                        plate.AddSourcePlate(sourcePlate.ID, sourcePlate.Replicates.Item2);
+                    }
+                }
+                JournalInfo journalInfo = new JournalInfo
+                {
+                    JournalID = "testJournal",
+                    SourcePlates = SourcePlates,
+                    DestinationPlates = DestinationPlates
+                };
+
+                _runLogger.CreateJournal(journalInfo);
+                _runLogger.CreateRun(runInfo);
+
+                // Create the dictionary of plates
+                var platesDictionary = new Dictionary<string, Tuple<int, int>>();
+
+                // Add SourcePlates to the dictionary
+                foreach (var plate in SourcePlates)
+                {
+                    platesDictionary[plate.ID] = new Tuple<int, int>(plate.Stack, plate.PositionInStack);
+                }
+
+                // Add DestinationPlates to the dictionary
+                foreach (var plate in DestinationPlates)
+                {
+                    platesDictionary[plate.ID] = new Tuple<int, int>(plate.Stack, plate.PositionInStack);
+                }
+                // make initial runstate
+                _events.ResetEvents();
+                List<Plate> allPlates = new List<Plate>();
+                allPlates.AddRange(SourcePlates);
+                allPlates.AddRange(DestinationPlates);
+                _events._plates = allPlates;
+                _epsonRunner.SaveRunState(journalInfo.JournalID, 1);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"An error occurred: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+        private void PopulateCarousel(List<Plate> deserializedPlates)
+        {
+            _ = _carousel.RemoveAllPlates();
+            foreach (Plate plate in deserializedPlates)
+            {
+                _carousel.AddPlate(plate, plate.Stack);
+            }
+        }
+
+        [RelayCommand]
+        private async void StartRun()
+        {
+            if (Parameters.UsingInstruments)
+            {
+                if (!InstrumentController.KX2.IsInitialized())
+                {
+                    await Task.Run(() =>
+                    {
+                        InstrumentController.InitializeArm();
+                    });
+                }
+            }
+            string currentJournalID = "testJournal"; // Replace with actual journal ID
+            _events.ResetEvents();
+            string serializedPlates = _runLogger.LoadRunState(currentJournalID).InitialPlates;
+            List<Plate> deserializedPlates = PlateSerializer.DeserializePlates(serializedPlates);
+            _events._plates = deserializedPlates;
+            PopulateCarousel(deserializedPlates);
+            _events.ResumeLine = 0;
+            _kx2Runner.SaveRunState(currentJournalID, 1);
+
+            RunCommandsButton.IsEnabled = false;
+            CancelButton.IsEnabled = true;
+            StatusTextBlock.Text = string.Empty;
+            AppendStatus("Running commands...");
+
+            _cts = new CancellationTokenSource();
+
+            // make carousel from starting plate positions for journal
+
+            try
+            {
+                await Task.WhenAll(
+                    _epsonRunner.RunCommandsAsync(currentJournalID, 1, _cts.Token),
+                    _kx2Runner.RunCommandsAsync(currentJournalID, 1, _cts.Token)
+                );
+            }
+            catch (OperationCanceledException)
+            {
+                AppendStatus("Command execution was cancelled.");
+            }
+            catch (Exception ex)
+            {
+                AppendStatus($"An error occurred: {ex.Message}");
+            }
+            finally
+            {
+                if (!_cts.Token.IsCancellationRequested)
+                {
+                    AppendStatus("All commands completed successfully.");
+                    _runLogger.MarkRunAsCompleted(currentJournalID);
+                }
+                RunCommandsButton.IsEnabled = true;
+                CancelButton.IsEnabled = false;
+            }
+        }
+
+        [RelayCommand]
+        private async void ResumeRun()
+        {
+            var lastRunState = _runLogger.LoadRunState("testJournal"); // TODO: Replace with actual journal ID
+            if (Parameters.UsingInstruments)
+            {
+                if (!InstrumentController.KX2.IsInitialized())
+                {
+                    await Task.Run(() =>
+                    {
+                        InstrumentController.InitializeArm();
+                    });
+                }
+            }
+            ResumeRun(lastRunState);
+        }
+
+        [RelayCommand]
+        private async void CancelRun()
+        {
+            CancelButton.IsEnabled = false;
+            StatusTextBlock.Text += "Cancelling...";
+            InstrumentController.KX2.ScriptStop();
+            _cts?.Cancel();
+            if (Parameters.UsingInstruments)
+            {
+                InstrumentController.StopAll();
+            }
+        }
+
+        [ObservableProperty]
+        private ObservableCollection<string> fileOptions = new ObservableCollection<string>
+        {
+            "Save Script",
+            "Load Script"
+        };
+
+        [ObservableProperty]
+        private string selectedFileOption;
+
+        partial void OnSelectedFileOptionChanged(string value)
+        {
+            if (value == "Save Script")
+            {
+                OpenSaveScriptWindow();
+            }
+            else if (value == "Load Script")
+            {
+                OpenLoadScriptWindow();
+            }
+        }
+
+        private void OpenSaveScriptWindow()
+        {
+            // Logic to open Save Script window
+        }
+
+        private void OpenLoadScriptWindow()
+        {
+            // Logic to open Load Script window
+        }
+
+        [ObservableProperty]
+        private ObservableCollection<string> toolOptions = new ObservableCollection<string>
+        {
+            "Labware Manager"
+        };
+
+        [ObservableProperty]
+        private string selectedToolOption;
+
+        partial void OnSelectedToolOptionChanged(string value)
+        {
+            if (value == "Labware Manager")
+            {
+                OpenLabware();
+            }
+        }
+
         private void OpenLabware()
         {
             LabwareDefinitionsWindow labwareDefinitionsWindow = new LabwareDefinitionsWindow("Data Source=" + Parameters.LabwareDatabase);
             labwareDefinitionsWindow.ShowDialog();
         }
 
+        [RelayCommand]
+        private void MinimizeWindow()
+        {
+            this.WindowState = WindowState.Minimized;
+        }
+
+        [RelayCommand]
+        private void MaximizeWindow()
+        {
+            if (this.WindowState == WindowState.Maximized)
+            {
+                this.WindowState = WindowState.Normal;
+                MaximizeButton.Template = (ControlTemplate)this.Resources["MaximizeButtonControlTemplate"];
+            }
+            else
+            {
+                this.WindowState = WindowState.Maximized;
+                MaximizeButton.Template = (ControlTemplate)this.Resources["RestoreButtonControlTemplate"];
+            }
+        }
+
+        [RelayCommand]
+        private void CloseWindow()
+        {
+            this.Close();
+        }
+
         private void CreateMicroplateStacker()
         {
-            VirtualizingStackPanel.SetIsVirtualizing(StackerGrid, true);
-            VirtualizingStackPanel.SetVirtualizationMode(StackerGrid, VirtualizationMode.Recycling);
-
+            int Rows = 26;
+            int Columns = 6;
             double aspectRatio = 4.0 / 1; // Width to height ratio for each stacker
             double horizontalMargin = 15;
             double verticalMargin = 5;
@@ -158,7 +888,7 @@ namespace PinTransferWPF
             StackerGrid.ColumnDefinitions.Clear();
             Shelves.Clear();
 
-            for (int i = Rows - 1; i >= 0; i--)
+            for (int i = 0; i < Rows; i++)
             {
                 StackerGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
             }
@@ -199,11 +929,19 @@ namespace PinTransferWPF
                 for (int j = 0; j < Columns; j++)
                 {
                     Path shelf = CreateShelf(stackerWidth, stackerHeight);
+                    if ((j == 2 && i == 23) | (j == 2 && i == 24) | (j == 3 && i == 24) | (j == 3 && i == 23) | (j == 3 && i == 22) | (j == 3 && i == 21))
+                    {
+                        shelf.Fill = Brushes.Black;
+                    }
+                    else
+                    {
+                        shelf.Fill = Brushes.LightGray;
+                    }
                     Grid containerGrid = new Grid();
                     containerGrid.Children.Add(shelf);
                     containerGrid.Margin = new Thickness(horizontalMargin / 2, verticalMargin / 2, horizontalMargin / 2, verticalMargin / 2);
 
-                    Grid.SetRow(containerGrid, Rows - 2 - i);
+                    Grid.SetRow(containerGrid, i);
                     Grid.SetColumn(containerGrid, j);
                     StackerGrid.Children.Add(containerGrid);
 
@@ -216,7 +954,7 @@ namespace PinTransferWPF
             {
                 TextBlock columnNumber = new TextBlock
                 {
-                    Text = (ColumnShift(j + 1)).ToString(),
+                    Text = (j + 1).ToString(),
                     HorizontalAlignment = HorizontalAlignment.Center,
                     VerticalAlignment = VerticalAlignment.Center,
                     FontWeight = FontWeights.Bold
@@ -230,412 +968,83 @@ namespace PinTransferWPF
 
         private Path CreateShelf(double width, double height)
         {
-            double cornerRadius = Math.Min(width, height) * 0.15;
+            double thickness = Math.Min(width, height) * 0.1; // Adjust thickness as needed
 
-            var geometry = new RectangleGeometry(
-                new Rect(0, 0, width, height),
-                cornerRadius,
-                cornerRadius
-            );
+            var pathFigure = new PathFigure
+            {
+                StartPoint = new Point(0, 0),
+                Segments = new PathSegmentCollection
+                {
+                    new LineSegment(new Point(0, height), true),
+                    new LineSegment(new Point(width, height), true),
+                    new LineSegment(new Point(width, 0), true),
+                    new LineSegment(new Point(width - thickness, 0), true),
+                    new LineSegment(new Point(width - thickness, height - thickness), true),
+                    new LineSegment(new Point(thickness, height - thickness), true),
+                    new LineSegment(new Point(thickness, 0), true),
+                    new LineSegment(new Point(0, 0), true)
+                }
+            };
+
+            var pathGeometry = new PathGeometry();
+            pathGeometry.Figures.Add(pathFigure);
 
             return new Path
             {
-                Data = geometry,
-                Fill = backgroundColor,
+                Data = pathGeometry,
+                Fill = Brushes.Black,
                 Stroke = Brushes.Transparent,
                 StrokeThickness = 1
             };
-
-
-            // For "U" shaped shelf
-            //double thickness = Math.Min(width, height) * 0.1; // Adjust thickness as needed
-
-            //var pathFigure = new PathFigure
-            //{
-            //    StartPoint = new Point(0, 0),
-            //    Segments = new PathSegmentCollection
-            //    {
-            //        new LineSegment(new Point(0, height), true),
-            //        new LineSegment(new Point(width, height), true),
-            //        new LineSegment(new Point(width, 0), true),
-            //        new LineSegment(new Point(width - thickness, 0), true),
-            //        new LineSegment(new Point(width - thickness, height - thickness), true),
-            //        new LineSegment(new Point(thickness, height - thickness), true),
-            //        new LineSegment(new Point(thickness, 0), true),
-            //        new LineSegment(new Point(0, 0), true)
-            //    }
-            //};
-
-            //var pathGeometry = new PathGeometry();
-            //pathGeometry.Figures.Add(pathFigure);
-
-            //return new Path
-            //{
-            //    Data = pathGeometry,
-            //    Fill = Brushes.Black,
-            //    Stroke = Brushes.Transparent,
-            //    StrokeThickness = 1
-            //};
         }
 
-        //public void AddPlateToShelf(int row, int column, Brush fillColor, Plate plate)
-        //{
-        //    //if (Shelves.TryGetValue((row, column), out Grid containerGrid))
-        //    //{
-        //    //    containerGrid.UpdateLayout();
-        //    //    Path Shelf = containerGrid.Children[0] as Path; // Assuming the U shape is the first child
-        //    //    if (Shelf == null) return; // Exit if we can't find the U shape
-
-        //    //    double containerWidth = containerGrid.ActualWidth;
-        //    //    double containerHeight = containerGrid.ActualHeight;
-
-        //    //    if (containerWidth <= 0 || containerHeight <= 0)
-        //    //    {
-        //    //        // If ActualWidth/Height are not set, use the Width/Height properties
-        //    //        containerWidth = containerGrid.Width;
-        //    //        containerHeight = containerGrid.Height;
-        //    //    }
-
-        //    //    double uThickness = Math.Min(containerWidth, containerHeight) * 0.1; // U shape thickness
-
-        //    //    // Calculate rectangle dimensions
-        //    //    double rectWidth = containerWidth - (4 * uThickness);
-        //    //    double rectHeight = containerHeight - (2 * uThickness);
-
-        //    //    Rectangle visualPlate = new Rectangle
-        //    //    {
-        //    //        Tag = plate,
-        //    //        Width = Math.Max(0, rectWidth),
-        //    //        Height = Math.Max(0, rectHeight),
-        //    //        VerticalAlignment = VerticalAlignment.Center,
-        //    //        HorizontalAlignment = HorizontalAlignment.Center,
-        //    //        Fill = fillColor
-        //    //    };
-        //    //    // Add the event handler
-        //    //    visualPlate.MouseLeftButtonDown += Plate_MouseLeftButtonDown;
-        //    //    //TODO unsubscribe when plate deleted?
-        //    //    // Add the rectangle to the existing containerGrid
-        //    //    containerGrid.Children.Add(visualPlate);
-        //    //}
-        //    if (Shelves.TryGetValue((row, column), out Grid containerGrid))
-        //    {
-        //        containerGrid.UpdateLayout();
-
-        //        double containerWidth = containerGrid.ActualWidth;
-        //        double containerHeight = containerGrid.ActualHeight;
-
-        //        if (containerWidth <= 0 || containerHeight <= 0)
-        //        {
-        //            containerWidth = containerGrid.Width;
-        //            containerHeight = containerGrid.Height;
-        //        }
-
-        //        // Create a plate with the same dimensions as the shelf
-        //        Path visualPlate = CreateShelf(containerWidth, containerHeight);
-        //        visualPlate.Tag = plate;
-        //        visualPlate.Fill = fillColor;
-        //        visualPlate.Opacity = 0.8; // Makes it slightly transparent to see overlap
-
-        //        // Enable dragging
-        //        visualPlate.MouseLeftButtonDown += Plate_MouseLeftButtonDown;
-        //        visualPlate.MouseMove += Plate_MouseMove;
-        //        visualPlate.MouseLeftButtonUp += Plate_MouseLeftButtonUp;
-
-        //        containerGrid.Children.Add(visualPlate);
-        //    }
-        //}
-
-        public void AddPlateToShelf(int row, int column, Brush fillColor, Plate plate)
+        public void AddPlateToShelf(int row, int column, Brush fillColor)
         {
             if (Shelves.TryGetValue((row, column), out Grid containerGrid))
             {
                 containerGrid.UpdateLayout();
+                Path Shelf = containerGrid.Children[0] as Path; // Assuming the U shape is the first child
+                if (Shelf == null) return; // Exit if we can't find the U shape
 
                 double containerWidth = containerGrid.ActualWidth;
                 double containerHeight = containerGrid.ActualHeight;
 
                 if (containerWidth <= 0 || containerHeight <= 0)
                 {
+                    // If ActualWidth/Height are not set, use the Width/Height properties
                     containerWidth = containerGrid.Width;
                     containerHeight = containerGrid.Height;
                 }
 
-                Path visualPlate = CreateShelf(containerWidth, containerHeight);
-                visualPlate.Tag = plate;
-                visualPlate.Fill = fillColor;
-                visualPlate.Opacity = 0.8;
+                double uThickness = Math.Min(containerWidth, containerHeight) * 0.1; // U shape thickness
 
-                // Add hardware acceleration - corrected syntax
-                RenderOptions.SetEdgeMode(visualPlate, EdgeMode.Aliased);
-                RenderOptions.SetBitmapScalingMode(visualPlate, BitmapScalingMode.LowQuality);
-                visualPlate.CacheMode = new BitmapCache();
+                // Calculate rectangle dimensions
+                double rectWidth = containerWidth - (4 * uThickness);
+                double rectHeight = containerHeight - (2 * uThickness);
 
-                // Enable dragging
-                visualPlate.MouseLeftButtonDown += Plate_MouseLeftButtonDown;
-                visualPlate.MouseMove += Plate_MouseMove;
-                visualPlate.MouseLeftButtonUp += Plate_MouseLeftButtonUp;
-
-                containerGrid.Children.Add(visualPlate);
-            }
-        }
-
-        private TranslateTransform dragTransform;
-        private CompositionTarget compositionTarget;
-        private bool isDragging = false;
-        private Point startPoint;
-        private Path draggedPlate;
-        private Grid sourceGrid;
-        private const double dragThreshold = 5.0; // Pixels of movement before considering it a drag
-        private Point dragStartPosition;
-        private bool isPositionInitialized = false;
-        private Point offset;
-
-        private void Plate_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
-        {
-            draggedPlate = sender as Path;
-            if (draggedPlate != null)
-            {
-                // Calculate offset between mouse and plate's top-left corner
-                Point mousePos = e.GetPosition(draggedPlate);
-                offset = new Point(mousePos.X, mousePos.Y);
-
-                sourceGrid = draggedPlate.Parent as Grid;
-
-                // Initialize transform
-                dragTransform = new TranslateTransform();
-                draggedPlate.RenderTransform = dragTransform;
-
-                // Set up hardware acceleration
-                RenderOptions.SetEdgeMode(draggedPlate, EdgeMode.Aliased);
-                RenderOptions.SetBitmapScalingMode(draggedPlate, BitmapScalingMode.LowQuality);
-                draggedPlate.CacheMode = new BitmapCache();
-
-                // Store original size and position
-                double originalWidth = draggedPlate.Width;
-                double originalHeight = draggedPlate.Height;
-
-                // Get absolute position before removing from source
-                Point platePosition = draggedPlate.TranslatePoint(new Point(0, 0), MainGrid);
-
-                // Move to main grid
-                sourceGrid.Children.Remove(draggedPlate);
-                MainGrid.Children.Add(draggedPlate);
-
-                // Set initial position in main grid
-                draggedPlate.Width = originalWidth;
-                draggedPlate.Height = originalHeight;
-                Canvas.SetLeft(draggedPlate, platePosition.X);
-                Canvas.SetTop(draggedPlate, platePosition.Y);
-                Panel.SetZIndex(draggedPlate, 1000);
-
-                draggedPlate.CaptureMouse();
-                CompositionTarget.Rendering += UpdateDragPosition;
-                e.Handled = true;
-            }
-        }
-
-        private void UpdateDragPosition(object sender, EventArgs e)
-        {
-            if (draggedPlate != null)
-            {
-                Point currentPosition = Mouse.GetPosition(MainGrid);
-                Canvas.SetLeft(draggedPlate, currentPosition.X - offset.X);
-                Canvas.SetTop(draggedPlate, currentPosition.Y - offset.Y);
-            }
-        }
-
-        private void Plate_MouseMove(object sender, MouseEventArgs e)
-        {
-            if (draggedPlate == null) return;
-
-            if (!isDragging)
-            {
-                Point currentPosition = e.GetPosition(null);
-                Vector difference = startPoint - currentPosition;
-
-                if (Math.Abs(difference.X) > dragThreshold || Math.Abs(difference.Y) > dragThreshold)
+                Rectangle plate = new Rectangle
                 {
-                    isDragging = true;
-                }
-            }
+                    Width = Math.Max(0, rectWidth),
+                    Height = Math.Max(0, rectHeight),
+                    VerticalAlignment = VerticalAlignment.Center,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    Fill = Brushes.Coral
+            };
+                // Add the event handler
+                plate.MouseLeftButtonDown += Plate_MouseLeftButtonDown;
 
-            e.Handled = true;
+                // Add the rectangle to the existing containerGrid
+                containerGrid.Children.Add(plate);
+            }
         }
 
-        private void Plate_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        private void Plate_MouseLeftButtonDown(object sender, EventArgs e)
         {
-            if (draggedPlate != null)
+            if (sender is Rectangle clickedPlate)
             {
-                draggedPlate.ReleaseMouseCapture();
-                CompositionTarget.Rendering -= UpdateDragPosition;
-
-                if (isDragging)
-                {
-                    try
-                    {
-                        Point currentPosition = e.GetPosition(StackerGrid);
-                        HitTestResult result = VisualTreeHelper.HitTest(StackerGrid, currentPosition);
-
-                        Grid targetGrid = null;
-                        if (result != null)
-                        {
-                            DependencyObject current = result.VisualHit;
-                            while (current != null && current is FrameworkElement)
-                            {
-                                if (current is Grid grid && Shelves.ContainsValue(grid))
-                                {
-                                    targetGrid = grid;
-                                    break;
-                                }
-                                current = VisualTreeHelper.GetParent(current);
-                            }
-                        }
-
-                        if (targetGrid != null)
-                        {
-                            try
-                            {
-                                // Remove from main grid and add to target
-                                MainGrid.Children.Remove(draggedPlate);
-                                dragTransform.X = 0;
-                                dragTransform.Y = 0;
-                                targetGrid.Children.Add(draggedPlate);
-
-                                draggedPlate.Width = targetGrid.ActualWidth;
-                                draggedPlate.Height = targetGrid.ActualHeight;
-
-                                if (draggedPlate.Tag is Plate plate)
-                                {
-                                    var targetPosition = GetGridPosition(targetGrid);
-                                    if (targetPosition.HasValue)
-                                    {
-                                        if (plate is SourcePlate sourcePlate)
-                                        {
-                                            sourcePlate.PositionInStack = targetPosition.Value.row;
-                                            sourcePlate.Stack = ColumnShift(targetPosition.Value.column + 1);
-                                        }
-                                        else if (plate is DestinationPlate destPlate)
-                                        {
-                                            destPlate.PositionInStack = targetPosition.Value.row;
-                                            destPlate.Stack = ColumnShift(targetPosition.Value.column + 1);
-                                        }
-                                    }
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                // Return to source grid if error
-                                MainGrid.Children.Remove(draggedPlate);
-                                dragTransform.X = 0;
-                                dragTransform.Y = 0;
-                                sourceGrid.Children.Add(draggedPlate);
-                                System.Diagnostics.Debug.WriteLine($"Error moving plate: {ex.Message}");
-                            }
-                        }
-                        else
-                        {
-                            // Return to source grid if no valid target
-                            MainGrid.Children.Remove(draggedPlate);
-                            dragTransform.X = 0;
-                            dragTransform.Y = 0;
-                            sourceGrid.Children.Add(draggedPlate);
-                        }
-                    }
-                    finally
-                    {
-                        Panel.SetZIndex(draggedPlate, 0);
-                    }
-                }
-                else
-                {
-                    HandlePlateClick();
-                }
-
-                isDragging = false;
-                draggedPlate = null;
-                dragTransform = null;
-                e.Handled = true;
+                clickedPlate.Fill = (clickedPlate.Fill == Brushes.Coral) ? Brushes.MediumSeaGreen : Brushes.Coral;
             }
         }
-
-        // helper method to find the grid position
-        private (int row, int column)? GetGridPosition(Grid grid)
-        {
-            foreach (var kvp in Shelves)
-            {
-                if (kvp.Value == grid)
-                {
-                    return kvp.Key;
-                }
-            }
-            return null;
-        }
-
-        private void HandlePlateClick()
-        {
-            if (draggedPlate.Tag is Plate plate)
-            {
-                draggedPlate.Fill = (draggedPlate.Fill == selectedPlateColor)
-                    ? unselectedPlateColor
-                    : selectedPlateColor;
-
-                if (plate is SourcePlate)
-                {
-                    ViewModel.SelectedSourcePlate = plate;
-                }
-                else if (plate is DestinationPlate)
-                {
-                    ViewModel.SelectedDestinationPlate = plate;
-                }
-            }
-        }
-
-        public void OnPlatesChanged(object sender, NotifyCollectionChangedEventArgs e)
-        {
-            if (e.NewItems != null)
-            {
-                foreach (var item in e.NewItems)
-                {
-                    if (item.GetType() == typeof(SourcePlate))
-                    {
-                        AddPlateToShelf(((SourcePlate)item).PositionInStack, ColumnShift(((SourcePlate)item).Stack), unselectedPlateColor, (SourcePlate)item);
-                    }
-                    else if (item.GetType() == typeof(DestinationPlate))
-                    {
-                        AddPlateToShelf(((DestinationPlate)item).PositionInStack, ColumnShift(((DestinationPlate)item).Stack), unselectedPlateColor, (DestinationPlate)item);
-                    }
-                }
-            }
-        }
-
-        private int ColumnShift(int originalColumn)
-        {
-            int newColumn = ((originalColumn - 1 + Offset) % Columns + Columns) % Columns + 1;
-            return newColumn;
-        }
-
-        //private void Plate_MouseLeftButtonDown(object sender, EventArgs e)
-        //{
-        //    if (sender is Rectangle clickedPlate)
-        //    {
-        //        clickedPlate.Fill = (clickedPlate.Fill == selectedPlateColor) ? unselectedPlateColor : selectedPlateColor;
-        //        if (clickedPlate.Tag.GetType() == typeof(SourcePlate))
-        //        {
-        //            ViewModel.SelectedSourcePlate = (Plate)clickedPlate.Tag;
-        //        }
-        //        else if (clickedPlate.Tag.GetType() == typeof(DestinationPlate))
-        //        {
-        //            ViewModel.SelectedDestinationPlate = (Plate)clickedPlate.Tag;
-        //        }
-        //    }
-        //}
-
-        private void SelectPlate(object sender, EventArgs e)
-        {
-            
-        }
-
-        public event EventHandler PlateSelected;
 
         private void MainWindow_SizeChanged(object sender, SizeChangedEventArgs e)
         {
@@ -648,27 +1057,17 @@ namespace PinTransferWPF
         {
             resizeTimer.Stop();
             CreateMicroplateStacker();
+            AddPlateToShelf(24, 2, Brushes.MediumSeaGreen);
+            AddPlateToShelf(23, 2, Brushes.MediumSeaGreen);
+            AddPlateToShelf(21, 3, Brushes.Coral);
+            AddPlateToShelf(24, 3, Brushes.Coral);
+            AddPlateToShelf(23, 3, Brushes.Coral);
+            AddPlateToShelf(22, 3, Brushes.Coral);
         }
 
-        private void TitleBar_MouseDown(object sender, MouseButtonEventArgs e)
+        private void TitleBar_MouseDown(object sender, EventArgs e)
         {
-            WindowDragRequested?.Invoke(this, EventArgs.Empty);
+            this.DragMove();
         }
-
-        private void MaximizeWindow(MainViewModel ViewModel)
-        {
-            if (ViewModel.IsMaximized)
-            {
-                this.WindowState = WindowState.Normal;
-                ViewModel.IsMaximized = false;
-            }
-            else
-            {
-                this.WindowState = WindowState.Maximized;
-                ViewModel.IsMaximized = true;
-            }
-        }
-
-        public event EventHandler WindowDragRequested;
     }
 }
