@@ -9,7 +9,7 @@ using System.Windows.Data;
 using System.Windows.Markup;
 using System.Windows.Media;
 
-namespace WindowTools
+namespace PinTransferWPF
 {
     [ValueConversion(typeof(string), typeof(string))]
     public class RatioConverter : MarkupExtension, IValueConverter

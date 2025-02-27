@@ -5,12 +5,11 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:mvvm="using:CommunityToolkit.Mvvm.Input"
         xmlns:local="clr-namespace:PinTransferWPF"
-        xmlns:tools="clr-namespace:WindowTools"
         mc:Ignorable="d"
         WindowStyle="None"
         Title="Pin Transfer v2.0"
-        Height="{Binding Source={x:Static SystemParameters.PrimaryScreenHeight}, Converter={tools:RatioConverter}, ConverterParameter='0.7' }" 
-        Width="{Binding Source={x:Static SystemParameters.PrimaryScreenWidth}, Converter={tools:RatioConverter}, ConverterParameter='0.7' }" 
+        Height="{Binding Source={x:Static SystemParameters.PrimaryScreenHeight}, Converter={local:RatioConverter}, ConverterParameter='0.7' }" 
+        Width="{Binding Source={x:Static SystemParameters.PrimaryScreenWidth}, Converter={local:RatioConverter}, ConverterParameter='0.7' }" 
         WindowStartupLocation="CenterScreen"
         MinWidth="800"
         MinHeight="300"
@@ -88,8 +87,8 @@
                           ClickMode="Press"
                           IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
                           Content="{TemplateBinding Tag}"
-                          FontFamily="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=(tools:ComboBoxExtensions.ButtonFontFamily)}"
-                          FontSize="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=(tools:ComboBoxExtensions.ButtonFontSize)}">
+                          FontFamily="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=(local:ComboBoxExtensions.ButtonFontFamily)}"
+                          FontSize="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=(local:ComboBoxExtensions.ButtonFontSize)}">
                     <ToggleButton.Template>
                         <ControlTemplate TargetType="{x:Type ToggleButton}">
                             <Border Background="{TemplateBinding Background}">
@@ -221,16 +220,16 @@
                 <ComboBox x:Name="fileComboBox" 
                         Template="{StaticResource TitleBarComboBoxTemplate}"
                         Tag="  File  "
-                        tools:ComboBoxExtensions.ButtonFontFamily="Deja Vu"
-                        tools:ComboBoxExtensions.ButtonFontSize="18"
+                        local:ComboBoxExtensions.ButtonFontFamily="Deja Vu"
+                        local:ComboBoxExtensions.ButtonFontSize="18"
                         ItemsSource="{Binding FileOptions}"
                         SelectedItem="{Binding SelectedFileOption}">
                 </ComboBox>
                 <ComboBox x:Name="toolsComboBox" 
                         Template="{StaticResource TitleBarComboBoxTemplate}"
                         Tag="  Tools  "
-                        tools:ComboBoxExtensions.ButtonFontFamily="Deja Vu"
-                        tools:ComboBoxExtensions.ButtonFontSize="18"
+                        local:ComboBoxExtensions.ButtonFontFamily="Deja Vu"
+                        local:ComboBoxExtensions.ButtonFontSize="18"
                         ItemsSource="{Binding ToolOptions}"
                         SelectedItem="{Binding SelectedToolOption}">
                 </ComboBox>
