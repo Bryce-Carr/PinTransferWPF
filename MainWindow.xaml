@@ -3,9 +3,9 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:tools="clr-namespace:WindowTools"
         xmlns:mvvm="using:CommunityToolkit.Mvvm.Input"
         xmlns:local="clr-namespace:PinTransferWPF"
+        xmlns:tools="clr-namespace:WindowTools"
         mc:Ignorable="d"
         WindowStyle="None"
         Title="Pin Transfer v2.0"
@@ -15,18 +15,33 @@
         MinWidth="800"
         MinHeight="300"
     >
-    
     <Window.Resources>
+        <!-- Define Colors -->
+        <Color x:Key="PrimaryColor">#B42A6C</Color>
+        <Color x:Key="SecondaryColor">#F37AA5</Color>
+        <Color x:Key="AccentColor">#281BB5</Color>
+        <Color x:Key="BackgroundColor">#C9C1C5</Color>
+        <Color x:Key="SecondaryBackgroundColor">#7A7477</Color>
+        <Color x:Key="ForegroundColor">#FFFFFFFF</Color>
+
+        <!-- Define SolidColorBrushes -->
+        <SolidColorBrush x:Key="PrimaryBrush" Color="{StaticResource PrimaryColor}" />
+        <SolidColorBrush x:Key="SecondaryBrush" Color="{StaticResource SecondaryColor}" />
+        <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource AccentColor}" />
+        <SolidColorBrush x:Key="BackgroundBrush" Color="{StaticResource BackgroundColor}" />
+        <SolidColorBrush x:Key="SecondaryBackgroundBrush" Color="{StaticResource SecondaryBackgroundColor}" />
+        <SolidColorBrush x:Key="ForegroundBrush" Color="{StaticResource ForegroundColor}" />
+        
         <!-- Minimize Button Template -->
         <Style x:Key="TitleBarButton" TargetType="Button">
             <!-- Define the style for the minimize button here -->
             <Setter Property="Background" Value="Transparent"/>
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="LightGray" />
+                    <Setter Property="Background" Value="{StaticResource BackgroundBrush}" />
                 </Trigger>
                 <Trigger Property="IsPressed" Value="True">
-                    <Setter Property="Background" Value="DarkGray" />
+                    <Setter Property="Background" Value="{StaticResource SecondaryBackgroundBrush}" />
                 </Trigger>
             </Style.Triggers>
         </Style>
@@ -88,13 +103,13 @@
                             <Setter Property="Background" Value="Transparent"/>
                             <Style.Triggers>
                                 <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter Property="Background" Value="LightGray" />
+                                    <Setter Property="Background" Value="{StaticResource BackgroundBrush}" />
                                 </Trigger>
                                 <Trigger Property="IsPressed" Value="True">
-                                    <Setter Property="Background" Value="DarkGray" />
+                                    <Setter Property="Background" Value="{StaticResource SecondaryBackgroundBrush}" />
                                 </Trigger>
                                 <Trigger Property="IsChecked" Value="True">
-                                    <Setter Property="Background" Value="DarkGray"/>
+                                    <Setter Property="Background" Value="{StaticResource SecondaryBackgroundBrush}"/>
                                 </Trigger>
                             </Style.Triggers>
                         </Style>
@@ -130,8 +145,8 @@
                                 </Border>
                                 <ControlTemplate.Triggers>
                                     <Trigger Property="IsHighlighted" Value="true">
-                                        <Setter TargetName="Bd" Property="Background" Value="#FFADADAD"/>
-                                        <Setter TargetName="Bd" Property="BorderBrush" Value="#FF7E7E7E"/>
+                                        <Setter TargetName="Bd" Property="Background" Value="{StaticResource BackgroundBrush}"/>
+                                        <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource SecondaryBackgroundBrush}"/>
                                     </Trigger>
                                     <Trigger Property="IsEnabled" Value="false">
                                         <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"/>
@@ -145,22 +160,24 @@
         </ControlTemplate>
     </Window.Resources>
 
-    <Grid>
+    <Grid x:Name="MainGrid">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="60*"/>
-            <ColumnDefinition Width="10*"/>
-            <ColumnDefinition Width="10*"/>
-            <ColumnDefinition Width="10*"/>
-            <ColumnDefinition Width="10*"/>
+            <ColumnDefinition Width="25*"/>
+            <ColumnDefinition Width="15*"/>
+            <ColumnDefinition Width="15*"/>
+            <ColumnDefinition Width="5*"/>
+            <ColumnDefinition Width="5*"/>
+            <ColumnDefinition Width="5*"/>
+            <ColumnDefinition Width="5*"/>
             <ColumnDefinition Width="Auto"/>
         </Grid.ColumnDefinitions>
 
-        <Rectangle Grid.Row="0" Grid.ColumnSpan="4" Fill="SlateGray" MouseDown="TitleBar_MouseDown"/>
-        <DockPanel Grid.Column="3" HorizontalAlignment="Stretch"
+        <Rectangle Grid.Row="0" Grid.ColumnSpan="8" Fill="{StaticResource PrimaryBrush}" MouseDown="TitleBar_MouseDown"/>
+        <DockPanel Grid.Column="8" HorizontalAlignment="Stretch"
            VerticalAlignment="Stretch"
            LastChildFill="True">
 
@@ -171,19 +188,26 @@
 
                 <Button x:Name="MinimizeButton"
                     KeyboardNavigation.IsTabStop="False"
-                    Command="{Binding MinimizeWindow}"
+                    Command="{Binding MinimizeWindowCommand}"
                     Style="{StaticResource TitleBarButton}"
                     Template="{StaticResource MinimizeButtonControlTemplate}"/>
 
-                <Button x:Name="MaximizeButton"
-                    KeyboardNavigation.IsTabStop="False"
-                    Command="{Binding MaximizeWindow}"
-                    Style="{DynamicResource TitleBarButton}"
-                    Template="{DynamicResource MaximizeButtonControlTemplate}" />
+                <Button x:Name="MaximizeButton" Command="{Binding MaximizeWindowCommand}">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource TitleBarButton}">
+                            <Setter Property="Template" Value="{StaticResource MaximizeButtonControlTemplate}"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsMaximized}" Value="True">
+                                    <Setter Property="Template" Value="{StaticResource RestoreButtonControlTemplate}"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
 
                 <Button x:Name="CloseButton"
                     KeyboardNavigation.IsTabStop="False"
-                    Command="{Binding CloseWindow}"
+                    Command="{Binding CloseWindowCommand}"
                     Style="{DynamicResource TitleBarButton}"
                     Template="{DynamicResource CloseButtonControlTemplate}"/>
 
@@ -210,17 +234,69 @@
                         ItemsSource="{Binding ToolOptions}"
                         SelectedItem="{Binding SelectedToolOption}">
                 </ComboBox>
-            </StackPanel>       
+            </StackPanel>
         </DockPanel>
 
-        <Viewbox x:Name="StackerGridViewbox" Grid.Column="0" Grid.Row="1" HorizontalAlignment="Left" VerticalAlignment="Center">
-            <Grid x:Name="StackerGrid" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Margin="0,20,0,20">
+        <Viewbox x:Name="StackerGridViewbox" Grid.Column="0" Grid.Row="3" HorizontalAlignment="Left" VerticalAlignment="Center">
+            <Grid x:Name="StackerGrid" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Margin="0,20,0,20" Background="{StaticResource SecondaryBackgroundBrush}">
                 <!-- Stacks will be added here programmatically -->
             </Grid>
         </Viewbox>
+
+        <Grid Grid.Column="1" Grid.Row="3">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <ListView ItemsSource="{Binding SourcePlates}"
+              x:Name="SourcePlateListView"
+              SelectedItem="{Binding SelectedSourcePlate, Mode=TwoWay}"
+              Grid.Column="0">
+                <ListView.ItemTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding ID}"/>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+            <ListView ItemsSource="{Binding DestinationPlates}" 
+              x:Name="DestinationPlateListView"
+              SelectedItem="{Binding SelectedDestinationPlate, Mode=TwoWay}"
+              Grid.Column="1">
+                <ListView.ItemTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding ID}"/>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+        </Grid>
+
+        <Grid Grid.Column="2" Grid.Row="3">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <StackPanel Grid.Row="0" Orientation="Horizontal" >
+                <Label Content="Sources:" VerticalAlignment="Stretch" />
+                <TextBox Text="{Binding SourcesToAdd}" HorizontalAlignment="Stretch"/>
+            </StackPanel>
+            <StackPanel Grid.Row="1" Orientation="Horizontal" >
+                <Label Content="Replicates" VerticalAlignment="Stretch" />
+                <TextBox Text="{Binding ReplicatesOfSourcesToAdd}" HorizontalAlignment="Stretch"/>
+            </StackPanel>
+            <StackPanel Grid.Row="2" Orientation="Horizontal" >
+                <Label Content="Volume" VerticalAlignment="Stretch" />
+                <TextBox Text="{Binding VolumeOfSourcesToAdd}" HorizontalAlignment="Stretch"/>
+            </StackPanel>
+            <Button Content="AddPlates" HorizontalAlignment="Left" Grid.Row="3" VerticalAlignment="Stretch"
+                    Command="{Binding CreatePlatesCommand}"
+                    />
+        </Grid>
+        
         <!-- Add other UI elements in the second row -->
         <!-- New UI elements for creating a run -->
-        <Grid Grid.Row="1" Grid.Column="1" HorizontalAlignment="Left">
+        <Grid Grid.Row="1" Grid.Column="3" HorizontalAlignment="Left">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
@@ -245,19 +321,22 @@
                 <TextBox Text="{Binding CurrentScriptLine}"/>
             </StackPanel>
             <Button Grid.Row="4" x:Name="btnCreateRun" Margin="5" Padding="5" Content="Create Run"
-                    Command="{Binding CreateRun}"/>
+                    Command="{Binding CreateRunCommand}"/>
         </Grid>
-        <Button x:Name="RunCommandsButton" Content="Run Commands" HorizontalAlignment="Left" Grid.Row="1" Grid.Column="2" VerticalAlignment="Stretch"
-                Command="{Binding StartRunCommand}"/>
-        <Button x:Name="CancelButton" Content="Pause" HorizontalAlignment="Left" Grid.Row="1" Grid.Column="3" VerticalAlignment="Stretch"
-                Command="{Binding CancelRunCommand}" IsEnabled="False"/>
-        <ScrollViewer VerticalScrollBarVisibility="Auto" Name="StatusScrollViewer" Grid.Row="1" Grid.Column="4" VerticalAlignment="Stretch">
+        <Button x:Name="RunCommandsButton" Content="Run Commands" HorizontalAlignment="Left" Grid.Row="1" Grid.Column="4" VerticalAlignment="Stretch"
+                Command="{Binding StartRunCommand}"
+                IsEnabled="{Binding CanRunCommands}"/>
+        <Button x:Name="CancelButton" Content="Pause" HorizontalAlignment="Left" Grid.Row="1" Grid.Column="5" VerticalAlignment="Stretch"
+                Command="{Binding CancelRunCommand}"
+                IsEnabled="{Binding CanCancel}"/>
+        <ScrollViewer VerticalScrollBarVisibility="Auto" Name="StatusScrollViewer" Grid.Row="1" Grid.Column="6" VerticalAlignment="Stretch">
             <TextBlock x:Name="StatusTextBlock" 
                TextWrapping="Wrap" 
                VerticalAlignment="Stretch" 
-               HorizontalAlignment="Left"/>
+               HorizontalAlignment="Left"
+               Text="{Binding StatusText}"/>
         </ScrollViewer>
-        <Button Content="ResumeButton" HorizontalAlignment="Left" Grid.Row="1" Grid.Column="5" VerticalAlignment="Stretch"
+        <Button Content="ResumeButton" HorizontalAlignment="Left" Grid.Row="1" Grid.Column="7" VerticalAlignment="Stretch"
                 Command="{Binding ResumeRunCommand}"/>
     </Grid>
 </Window>

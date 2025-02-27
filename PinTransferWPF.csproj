@@ -46,13 +46,16 @@
     <Prefer32Bit>true</Prefer32Bit>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
-    <PlatformTarget>AnyCPU</PlatformTarget>
+    <PlatformTarget>x86</PlatformTarget>
     <DebugType>pdbonly</DebugType>
     <Optimize>true</Optimize>
     <OutputPath>bin\Release\</OutputPath>
     <DefineConstants>TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup>
+    <StartupObject>PinTransferWPF.App</StartupObject>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="KX2RobotControl">
@@ -67,7 +70,9 @@
     <Reference Include="System" />
     <Reference Include="System.ComponentModel.DataAnnotations" />
     <Reference Include="System.Data" />
+    <Reference Include="System.Data.Entity" />
     <Reference Include="System.Numerics" />
+    <Reference Include="System.Windows" />
     <Reference Include="System.Xml" />
     <Reference Include="Microsoft.CSharp" />
     <Reference Include="System.Core" />
@@ -86,11 +91,7 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </ApplicationDefinition>
-    <Compile Include="Class1.cs" />
-    <Compile Include="InstrumentControl.cs" />
-    <Compile Include="JournalExecution.cs" />
     <Compile Include="PinTransfer.cs" />
-    <Compile Include="Parameters.cs" />
     <Compile Include="LabwareDefinitionsWindow.xaml.cs">
       <DependentUpon>LabwareDefinitionsWindow.xaml</DependentUpon>
     </Compile>
@@ -99,6 +100,7 @@
     <Page Include="MainWindow.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Page>
     <Compile Include="App.xaml.cs">
       <DependentUpon>App.xaml</DependentUpon>
@@ -107,6 +109,7 @@
     <Compile Include="MainWindow.xaml.cs">
       <DependentUpon>MainWindow.xaml</DependentUpon>
       <SubType>Code</SubType>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Compile>
     <Page Include="LabwareDefinitionsWindow.xaml">
       <SubType>Designer</SubType>
@@ -114,8 +117,6 @@
     </Page>
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Modules.cs" />
-    <Compile Include="DatabaseManagement.cs" />
     <Compile Include="Properties\AssemblyInfo.cs">
       <SubType>Code</SubType>
     </Compile>
@@ -164,8 +165,17 @@
     <PackageReference Include="CommunityToolkit.Mvvm">
       <Version>8.4.0</Version>
     </PackageReference>
+    <PackageReference Include="Microsoft.Toolkit.Wpf.UI.Controls">
+      <Version>6.1.2</Version>
+    </PackageReference>
+    <PackageReference Include="NETStandard.Library">
+      <Version>2.0.3</Version>
+    </PackageReference>
     <PackageReference Include="Newtonsoft.Json">
       <Version>13.0.3</Version>
+    </PackageReference>
+    <PackageReference Include="PresentationFramework">
+      <Version>4.6.0</Version>
     </PackageReference>
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3">
       <Version>2.1.10</Version>
@@ -179,6 +189,24 @@
     <PackageReference Include="System.Text.Json">
       <Version>9.0.1</Version>
     </PackageReference>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\InstrumentControl\InstrumentControl.csproj">
+      <Project>{615e3c9a-fec3-4816-b12b-fe6e58a10be1}</Project>
+      <Name>InstrumentControl</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\PinTransferParameters\PinTransferParameters.csproj">
+      <Project>{b5127eb2-04a6-4b63-8318-1c804948951e}</Project>
+      <Name>PinTransferParameters</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\SystemComponents\SystemComponents.csproj">
+      <Project>{658294d2-8c81-4ef8-80c1-1108024ae0aa}</Project>
+      <Name>SystemComponents</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\ViewModels\ViewModels.csproj">
+      <Project>{a7e5a8f0-b16a-47c2-adf5-9cfb9ad0d8d6}</Project>
+      <Name>ViewModels</Name>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

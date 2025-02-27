@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace PinTransferWPF
 {
-    internal class PinTransfer
+    public class PinTransfer
     {
     }
 }
