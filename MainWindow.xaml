@@ -13,169 +13,25 @@
         WindowStartupLocation="CenterScreen"
         MinWidth="800"
         MinHeight="300"
+        Style="{StaticResource RoundedWindowStyle}"
+        AllowsTransparency="True"
+        Background="Transparent"
     >
-    <Window.Resources>
-        <!-- Define Colors -->
-        <Color x:Key="PrimaryColor">#B42A6C</Color>
-        <Color x:Key="SecondaryColor">#F37AA5</Color>
-        <Color x:Key="AccentColor">#281BB5</Color>
-        <Color x:Key="BackgroundColor">#C9C1C5</Color>
-        <Color x:Key="SecondaryBackgroundColor">#7A7477</Color>
-        <Color x:Key="ForegroundColor">#FFFFFFFF</Color>
 
-        <!-- Define SolidColorBrushes -->
-        <SolidColorBrush x:Key="PrimaryBrush" Color="{StaticResource PrimaryColor}" />
-        <SolidColorBrush x:Key="SecondaryBrush" Color="{StaticResource SecondaryColor}" />
-        <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource AccentColor}" />
-        <SolidColorBrush x:Key="BackgroundBrush" Color="{StaticResource BackgroundColor}" />
-        <SolidColorBrush x:Key="SecondaryBackgroundBrush" Color="{StaticResource SecondaryBackgroundColor}" />
-        <SolidColorBrush x:Key="ForegroundBrush" Color="{StaticResource ForegroundColor}" />
-        
-        <!-- Minimize Button Template -->
-        <Style x:Key="TitleBarButton" TargetType="Button">
-            <!-- Define the style for the minimize button here -->
-            <Setter Property="Background" Value="Transparent"/>
-            <Style.Triggers>
-                <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="{StaticResource BackgroundBrush}" />
-                </Trigger>
-                <Trigger Property="IsPressed" Value="True">
-                    <Setter Property="Background" Value="{StaticResource SecondaryBackgroundBrush}" />
-                </Trigger>
-            </Style.Triggers>
-        </Style>
-        <ControlTemplate x:Key="MinimizeButtonControlTemplate" TargetType="Button">
-            <!-- Define the control template for the minimize button here -->
-            <Border Background="{TemplateBinding Background}">
-                <TextBlock Text="🗕" FontFamily ="Deja Vu" FontSize="24" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-            </Border>
-        </ControlTemplate>
-
-        <!-- Maximize Button Template -->
-        <ControlTemplate x:Key="MaximizeButtonControlTemplate" TargetType="Button">
-            <Border Background="{TemplateBinding Background}">
-                <Grid>
-                    <TextBlock Text="🗖" FontFamily ="Deja Vu" FontSize="24" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                </Grid>
-            </Border>
-        </ControlTemplate>
-
-        <!-- Restore Button Template -->
-        <ControlTemplate x:Key="RestoreButtonControlTemplate" TargetType="Button">
-            <Border Background="{TemplateBinding Background}">
-                <Grid>
-                    <TextBlock Text="🗗" FontFamily ="Deja Vu" FontSize="24" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                </Grid>
-            </Border>
-        </ControlTemplate>
-        
-        <!-- Close Button Template -->
-        <ControlTemplate x:Key="CloseButtonControlTemplate" TargetType="Button">
-            <!-- Define the control template for the close button here -->
-            <Border Background="{TemplateBinding Background}">
-                <TextBlock Text="✖" FontFamily ="Deja Vu" FontSize="24" HorizontalAlignment="Center" VerticalAlignment="Stretch"/>
-            </Border>
-        </ControlTemplate>
-
-        <!-- TitleBar ComboBox Template -->
-        <ControlTemplate x:Key="TitleBarComboBoxTemplate" TargetType="{x:Type ComboBox}">
-            <Grid>
-                <ToggleButton x:Name="ToggleButton"
-                          Grid.Column="0"
-                          Margin="0,0,5,0"
-                          Focusable="False"
-                          ClickMode="Press"
-                          IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
-                          Content="{TemplateBinding Tag}"
-                          FontFamily="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=(local:ComboBoxExtensions.ButtonFontFamily)}"
-                          FontSize="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=(local:ComboBoxExtensions.ButtonFontSize)}">
-                    <ToggleButton.Template>
-                        <ControlTemplate TargetType="{x:Type ToggleButton}">
-                            <Border Background="{TemplateBinding Background}">
-                                <ContentPresenter HorizontalAlignment="Center" 
-                                              VerticalAlignment="Center"/>
-                            </Border>
-                        </ControlTemplate>
-                    </ToggleButton.Template>
-                    <ToggleButton.Style>
-                        <Style TargetType="{x:Type ToggleButton}">
-                            <Setter Property="Background" Value="Transparent"/>
-                            <Style.Triggers>
-                                <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter Property="Background" Value="{StaticResource BackgroundBrush}" />
-                                </Trigger>
-                                <Trigger Property="IsPressed" Value="True">
-                                    <Setter Property="Background" Value="{StaticResource SecondaryBackgroundBrush}" />
-                                </Trigger>
-                                <Trigger Property="IsChecked" Value="True">
-                                    <Setter Property="Background" Value="{StaticResource SecondaryBackgroundBrush}"/>
-                                </Trigger>
-                            </Style.Triggers>
-                        </Style>
-                    </ToggleButton.Style>
-                </ToggleButton>
-                <Popup IsOpen="{Binding IsChecked, ElementName=ToggleButton}" 
-                   Placement="Bottom"
-                   AllowsTransparency="True" 
-                   Focusable="False">
-                    <Border BorderBrush="{TemplateBinding BorderBrush}"
-                        BorderThickness="{TemplateBinding BorderThickness}"
-                        Background="{TemplateBinding Background}">
-                        <ScrollViewer SnapsToDevicePixels="True">
-                            <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Contained" />
-                        </ScrollViewer>
-                    </Border>
-                </Popup>
-            </Grid>
-            <ControlTemplate.Resources>
-                <Style TargetType="{x:Type ComboBoxItem}">
-                    <Setter Property="Template">
-                        <Setter.Value>
-                            <ControlTemplate TargetType="{x:Type ComboBoxItem}">
-                                <Border x:Name="Bd"
-                                    Padding="5,3"
-                                    Background="{TemplateBinding Background}"
-                                    BorderBrush="{TemplateBinding BorderBrush}"
-                                    BorderThickness="{TemplateBinding BorderThickness}"
-                                    SnapsToDevicePixels="true">
-                                    <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                                  VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
-                                                  SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
-                                </Border>
-                                <ControlTemplate.Triggers>
-                                    <Trigger Property="IsHighlighted" Value="true">
-                                        <Setter TargetName="Bd" Property="Background" Value="{StaticResource BackgroundBrush}"/>
-                                        <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource SecondaryBackgroundBrush}"/>
-                                    </Trigger>
-                                    <Trigger Property="IsEnabled" Value="false">
-                                        <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"/>
-                                    </Trigger>
-                                </ControlTemplate.Triggers>
-                            </ControlTemplate>
-                        </Setter.Value>
-                    </Setter>
-                </Style>
-            </ControlTemplate.Resources>
-        </ControlTemplate>
-    </Window.Resources>
-
-    <Grid x:Name="MainGrid">
+    <Grid x:Name="MainGrid" Margin="0,10,0,0">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="25*"/>
+            <ColumnDefinition Width="40*"/>
             <ColumnDefinition Width="15*"/>
             <ColumnDefinition Width="15*"/>
-            <ColumnDefinition Width="5*"/>
-            <ColumnDefinition Width="5*"/>
-            <ColumnDefinition Width="5*"/>
             <ColumnDefinition Width="5*"/>
             <ColumnDefinition Width="Auto"/>
         </Grid.ColumnDefinitions>
 
-        <Rectangle Grid.Row="0" Grid.ColumnSpan="8" Fill="{StaticResource PrimaryBrush}" MouseDown="TitleBar_MouseDown"/>
+        <Rectangle Grid.Row="0" Grid.ColumnSpan="5" Fill="{StaticResource PrimaryBrush}" MouseDown="TitleBar_MouseDown"/>
         <DockPanel Grid.Column="8" HorizontalAlignment="Stretch"
            VerticalAlignment="Stretch"
            LastChildFill="True">
@@ -221,7 +77,7 @@
                         Template="{StaticResource TitleBarComboBoxTemplate}"
                         Tag="  File  "
                         local:ComboBoxExtensions.ButtonFontFamily="Deja Vu"
-                        local:ComboBoxExtensions.ButtonFontSize="18"
+                        local:ComboBoxExtensions.ButtonFontSize="24"
                         ItemsSource="{Binding FileOptions}"
                         SelectedItem="{Binding SelectedFileOption}">
                 </ComboBox>
@@ -229,24 +85,24 @@
                         Template="{StaticResource TitleBarComboBoxTemplate}"
                         Tag="  Tools  "
                         local:ComboBoxExtensions.ButtonFontFamily="Deja Vu"
-                        local:ComboBoxExtensions.ButtonFontSize="18"
+                        local:ComboBoxExtensions.ButtonFontSize="24"
                         ItemsSource="{Binding ToolOptions}"
                         SelectedItem="{Binding SelectedToolOption}">
                 </ComboBox>
             </StackPanel>
         </DockPanel>
 
-        <Viewbox x:Name="StackerGridViewbox" Grid.Column="0" Grid.Row="3" HorizontalAlignment="Left" VerticalAlignment="Center">
-            <Grid x:Name="StackerGrid" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Margin="0,20,0,20" Background="{StaticResource SecondaryBackgroundBrush}">
+        <Viewbox x:Name="StackerGridViewbox" Grid.Column="0" Grid.Row="3" HorizontalAlignment="Left" VerticalAlignment="Top">
+            <Grid x:Name="StackerGrid" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Margin="10,10,10,10" Background="{StaticResource SecondaryBackgroundBrush}">
                 <!-- Stacks will be added here programmatically -->
             </Grid>
         </Viewbox>
 
-        <Grid Grid.Column="1" Grid.Row="3">
+        <Grid Grid.Column="1" Grid.Row="3" Margin="0,10,10,10" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="*"/>
-            </Grid.ColumnDefinitions>
+            </Grid.ColumnDefinitions>   
             <ListView ItemsSource="{Binding SourcePlates}"
               x:Name="SourcePlateListView"
               SelectedItem="{Binding SelectedSourcePlate, Mode=TwoWay}"
@@ -269,65 +125,85 @@
             </ListView>
         </Grid>
 
-        <Grid Grid.Column="2" Grid.Row="3">
+        <Grid Grid.Column="2" Grid.Row="1" Margin="10,10,0,0">
             <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
-            <StackPanel Grid.Row="0" Orientation="Horizontal" >
-                <Label Content="Sources:" VerticalAlignment="Stretch" />
-                <TextBox Text="{Binding SourcesToAdd}" HorizontalAlignment="Stretch"/>
-            </StackPanel>
-            <StackPanel Grid.Row="1" Orientation="Horizontal" >
-                <Label Content="Replicates" VerticalAlignment="Stretch" />
-                <TextBox Text="{Binding ReplicatesOfSourcesToAdd}" HorizontalAlignment="Stretch"/>
-            </StackPanel>
-            <StackPanel Grid.Row="2" Orientation="Horizontal" >
-                <Label Content="Volume" VerticalAlignment="Stretch" />
-                <TextBox Text="{Binding VolumeOfSourcesToAdd}" HorizontalAlignment="Stretch"/>
-            </StackPanel>
-            <Button Content="AddPlates" HorizontalAlignment="Left" Grid.Row="3" VerticalAlignment="Stretch"
-                    Command="{Binding CreatePlatesCommand}"
-                    />
+            <Grid Grid.Column="0" Grid.Row="0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+                <StackPanel Grid.Row="0" Orientation="Horizontal" >
+                    <Label Content="Sources:" VerticalAlignment="Stretch" />
+                    <TextBox Text="{Binding SourcesToAdd}" HorizontalAlignment="Stretch"/>
+                </StackPanel>
+                <StackPanel Grid.Row="1" Orientation="Horizontal" >
+                    <Label Content="Replicates" VerticalAlignment="Stretch" />
+                    <TextBox Text="{Binding ReplicatesOfSourcesToAdd}" HorizontalAlignment="Stretch"/>
+                </StackPanel>
+                <StackPanel Grid.Row="2" Orientation="Horizontal" >
+                    <Label Content="Volume" VerticalAlignment="Stretch" />
+                    <TextBox Text="{Binding VolumeOfSourcesToAdd}" HorizontalAlignment="Stretch" MinWidth="30"/>
+                </StackPanel>
+                <Button Content="AddPlates" HorizontalAlignment="Left" Grid.Row="3" VerticalAlignment="Stretch"
+                        Command="{Binding CreatePlatesCommand}"
+                        />
+            </Grid>
+            <!-- New UI elements for creating a run -->
+            <Grid Grid.Row="1" Grid.Column="0" HorizontalAlignment="Left" Margin="0,10,0,0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+                <StackPanel Grid.Row="0" Orientation="Horizontal" >
+                    <Label Content="Run ID:" VerticalAlignment="Stretch" />
+                    <TextBox Text="{Binding RunID}" HorizontalAlignment="Stretch"/>
+                </StackPanel>
+                <StackPanel Grid.Row="1" Orientation="Horizontal" >
+                    <Label Content="Screen Number:" VerticalAlignment="Stretch" />
+                    <TextBox Text="{Binding ScreenNumber}"/>
+                </StackPanel>
+                <StackPanel Grid.Row="2" Orientation="Horizontal" >
+                    <Label Content="User Name:" VerticalAlignment="Stretch" />
+                    <TextBox Text="{Binding UserName}"/>
+                </StackPanel>
+                <StackPanel Grid.Row="3" Orientation="Horizontal" >
+                    <Label Content="Current Script Line:" VerticalAlignment="Stretch" />
+                    <TextBox Text="{Binding CurrentScriptLine}"/>
+                </StackPanel>
+                <Button Grid.Row="4" x:Name="btnCreateRun" Margin="5" Padding="5" Content="Create Run"
+            Command="{Binding CreateRunCommand}"/>
+            </Grid>
+            <Grid Grid.Row="2" Grid.Column="0" HorizontalAlignment="Left" Margin="0,10,0,0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+                <Button x:Name="RunCommandsButton" Content="Run Commands" HorizontalAlignment="Left" Grid.Row="0" Grid.Column="0" VerticalAlignment="Stretch"
+                    Command="{Binding StartRunCommand}"
+                    IsEnabled="{Binding CanRunCommands}"/>
+                <Button x:Name="CancelButton" Content="Pause" HorizontalAlignment="Left" Grid.Row="1" Grid.Column="0" VerticalAlignment="Stretch"
+                    Command="{Binding CancelRunCommand}"
+                    IsEnabled="{Binding CanCancel}"/>
+                <Button Content="ResumeButton" HorizontalAlignment="Left" Grid.Row="2" Grid.Column="0" VerticalAlignment="Stretch"
+                    Command="{Binding ResumeRunCommand}"/>
+            </Grid>
         </Grid>
         
-        <!-- Add other UI elements in the second row -->
-        <!-- New UI elements for creating a run -->
-        <Grid Grid.Row="1" Grid.Column="3" HorizontalAlignment="Left">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="*" />
-            </Grid.RowDefinitions>
-            <StackPanel Grid.Row="0" Orientation="Horizontal" >
-                <Label Content="Run ID:" VerticalAlignment="Stretch" />
-                <TextBox Text="{Binding RunID}" HorizontalAlignment="Stretch"/>
-            </StackPanel>
-            <StackPanel Grid.Row="1" Orientation="Horizontal" >
-                <Label Content="Screen Number:" VerticalAlignment="Stretch" />
-                <TextBox Text="{Binding ScreenNumber}"/>
-            </StackPanel>
-            <StackPanel Grid.Row="2" Orientation="Horizontal" >
-                <Label Content="User Name:" VerticalAlignment="Stretch" />
-                <TextBox Text="{Binding UserName}"/>
-            </StackPanel>
-            <StackPanel Grid.Row="3" Orientation="Horizontal" >
-                <Label Content="Current Script Line:" VerticalAlignment="Stretch" />
-                <TextBox Text="{Binding CurrentScriptLine}"/>
-            </StackPanel>
-            <Button Grid.Row="4" x:Name="btnCreateRun" Margin="5" Padding="5" Content="Create Run"
-                    Command="{Binding CreateRunCommand}"/>
-        </Grid>
-        <Button x:Name="RunCommandsButton" Content="Run Commands" HorizontalAlignment="Left" Grid.Row="1" Grid.Column="4" VerticalAlignment="Stretch"
-                Command="{Binding StartRunCommand}"
-                IsEnabled="{Binding CanRunCommands}"/>
-        <Button x:Name="CancelButton" Content="Pause" HorizontalAlignment="Left" Grid.Row="1" Grid.Column="5" VerticalAlignment="Stretch"
-                Command="{Binding CancelRunCommand}"
-                IsEnabled="{Binding CanCancel}"/>
+        
         <ScrollViewer VerticalScrollBarVisibility="Auto" Name="StatusScrollViewer" Grid.Row="1" Grid.Column="6" VerticalAlignment="Stretch">
             <TextBlock x:Name="StatusTextBlock" 
                TextWrapping="Wrap" 
@@ -335,7 +211,6 @@
                HorizontalAlignment="Left"
                Text="{Binding StatusText}"/>
         </ScrollViewer>
-        <Button Content="ResumeButton" HorizontalAlignment="Left" Grid.Row="1" Grid.Column="7" VerticalAlignment="Stretch"
-                Command="{Binding ResumeRunCommand}"/>
+        
     </Grid>
 </Window>

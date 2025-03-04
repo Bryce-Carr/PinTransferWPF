@@ -97,6 +97,10 @@
     </Compile>
     <Compile Include="WindowNavigation.cs" />
     <Compile Include="WindowTools.cs" />
+    <Page Include="Styles.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
     <Page Include="MainWindow.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
@@ -191,20 +195,20 @@
     </PackageReference>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\InstrumentControl\InstrumentControl.csproj">
+    <ProjectReference Include="InstrumentControl\InstrumentControl.csproj">
       <Project>{615e3c9a-fec3-4816-b12b-fe6e58a10be1}</Project>
       <Name>InstrumentControl</Name>
     </ProjectReference>
-    <ProjectReference Include="..\PinTransferParameters\PinTransferParameters.csproj">
+    <ProjectReference Include="PinTransferParameters\PinTransferParameters.csproj">
       <Project>{b5127eb2-04a6-4b63-8318-1c804948951e}</Project>
       <Name>PinTransferParameters</Name>
     </ProjectReference>
-    <ProjectReference Include="..\SystemComponents\SystemComponents.csproj">
-      <Project>{658294d2-8c81-4ef8-80c1-1108024ae0aa}</Project>
+    <ProjectReference Include="SystemComponents\SystemComponents.csproj">
+      <Project>{0d3bf2e8-a385-409f-87e5-3eafc841407a}</Project>
       <Name>SystemComponents</Name>
     </ProjectReference>
-    <ProjectReference Include="..\ViewModels\ViewModels.csproj">
-      <Project>{a7e5a8f0-b16a-47c2-adf5-9cfb9ad0d8d6}</Project>
+    <ProjectReference Include="ViewModels\ViewModels.csproj">
+      <Project>{c5539acb-4b8e-483e-adf3-0cb8c4f24d73}</Project>
       <Name>ViewModels</Name>
     </ProjectReference>
   </ItemGroup>

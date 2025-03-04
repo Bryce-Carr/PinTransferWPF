@@ -1,0 +1,32 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+	<LangVersion>8.0</LangVersion>
+    <TargetFramework>netstandard2.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+    <PackageReference Include="Microsoft.Toolkit.Wpf.UI.Controls" Version="6.1.2" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <PackageReference Include="PresentationFramework" Version="4.6.0" />
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.10" />
+    <PackageReference Include="System.Collections" Version="4.3.0" />
+    <PackageReference Include="System.Data.SQLite" Version="1.0.119" />
+    <PackageReference Include="System.Text.Json" Version="9.0.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PinTransferParameters\PinTransferParameters.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="KX2RobotControl">
+      <HintPath>..\..\..\..\..\Program Files (x86)\Peak Robotics, Inc\KX2 Robot Control DLL\KX2RobotControl.dll</HintPath>
+    </Reference>
+    <Reference Include="RCAPINet">
+      <HintPath>..\..\..\..\..\EpsonRC70\exe\RCAPINet.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+</Project>

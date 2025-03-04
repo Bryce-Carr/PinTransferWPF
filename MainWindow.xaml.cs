@@ -1,38 +1,19 @@
 ﻿using System;
-using System.Collections;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using System.ComponentModel;
-using System.ComponentModel.Design;
-using System.Data.Entity.Core.Common.CommandTrees.ExpressionBuilder;
-using System.Diagnostics.Eventing.Reader;
-using System.Linq;
-using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Media.Media3D;
 using System.Windows.Shapes;
 using System.Windows.Threading;
-using CommunityToolkit.Mvvm.Input;
 using Integration;
-using RCAPINet;
-using static Integration.InstrumentEvents;
-using static Integration.RunLogger;
-using CommunityToolkit.Mvvm;
 using CommunityToolkit.Mvvm.ComponentModel;
 using ViewModels;
 using PinTransferParameters;
 using System.Collections.Specialized;
-using System.Data.Common;
-using System.Windows.Controls.Primitives;
-using System.Net.Sockets;
+using System.Linq;
+using System.Windows.Media.Media3D;
 
 namespace PinTransferWPF
 {
@@ -146,6 +127,18 @@ namespace PinTransferWPF
 
         private void CreateMicroplateStacker()
         {
+            // Store existing plates before clearing
+            var existingPlates = new List<(Path plate, int row, int column)>();
+            foreach (var kvp in Shelves)
+            {
+                var grid = kvp.Value;
+                var plates = grid.Children.OfType<Path>().Where(p => p.Tag is Plate).ToList();
+                foreach (var plate in plates)
+                {
+                    existingPlates.Add((plate, kvp.Key.Item1, kvp.Key.Item2));
+                    grid.Children.Remove(plate);
+                }
+            }
             VirtualizingStackPanel.SetIsVirtualizing(StackerGrid, true);
             VirtualizingStackPanel.SetVirtualizationMode(StackerGrid, VirtualizationMode.Recycling);
 
@@ -191,8 +184,8 @@ namespace PinTransferWPF
             }
 
             // Ensure minimum size
-            stackerWidth = Math.Max(1, stackerWidth);
-            stackerHeight = Math.Max(1, stackerHeight);
+            stackerWidth = Math.Max(4, stackerWidth);
+            stackerHeight = Math.Max(2, stackerHeight);
 
             for (int i = 0; i < Rows - 1; i++)
             {
@@ -201,13 +194,24 @@ namespace PinTransferWPF
                     Path shelf = CreateShelf(stackerWidth, stackerHeight);
                     Grid containerGrid = new Grid();
                     containerGrid.Children.Add(shelf);
-                    containerGrid.Margin = new Thickness(horizontalMargin / 2, verticalMargin / 2, horizontalMargin / 2, verticalMargin / 2);
+                    containerGrid.Margin = new Thickness(horizontalMargin / 2, verticalMargin / 2,
+                                                       horizontalMargin / 2, verticalMargin / 2);
+
+                    // Add SizeChanged handler
+                    containerGrid.SizeChanged += (s, e) =>
+                    {
+                        var plates = containerGrid.Children.OfType<Path>()
+                            .Where(p => p.Tag is Plate).ToList();
+                        foreach (var plate in plates)
+                        {
+                            UpdatePlateSize(containerGrid, plate);
+                        }
+                    };
 
                     Grid.SetRow(containerGrid, Rows - 2 - i);
                     Grid.SetColumn(containerGrid, j);
                     StackerGrid.Children.Add(containerGrid);
 
-                    // Store the containerGrid for later reference
                     Shelves[(i, j)] = containerGrid;
                 }
             }
@@ -225,6 +229,16 @@ namespace PinTransferWPF
                 Grid.SetRow(columnNumber, Rows - 1); // Place in the last row
                 Grid.SetColumn(columnNumber, j);
                 StackerGrid.Children.Add(columnNumber);
+            }
+
+            // Restore plates after recreating shelves
+            foreach (var (plate, row, column) in existingPlates)
+            {
+                if (Shelves.TryGetValue((row, column), out Grid containerGrid))
+                {
+                    UpdatePlateSize(containerGrid, plate);
+                    containerGrid.Children.Add(plate);
+                }
             }
         }
 
@@ -278,104 +292,62 @@ namespace PinTransferWPF
             //};
         }
 
-        //public void AddPlateToShelf(int row, int column, Brush fillColor, Plate plate)
-        //{
-        //    //if (Shelves.TryGetValue((row, column), out Grid containerGrid))
-        //    //{
-        //    //    containerGrid.UpdateLayout();
-        //    //    Path Shelf = containerGrid.Children[0] as Path; // Assuming the U shape is the first child
-        //    //    if (Shelf == null) return; // Exit if we can't find the U shape
-
-        //    //    double containerWidth = containerGrid.ActualWidth;
-        //    //    double containerHeight = containerGrid.ActualHeight;
-
-        //    //    if (containerWidth <= 0 || containerHeight <= 0)
-        //    //    {
-        //    //        // If ActualWidth/Height are not set, use the Width/Height properties
-        //    //        containerWidth = containerGrid.Width;
-        //    //        containerHeight = containerGrid.Height;
-        //    //    }
-
-        //    //    double uThickness = Math.Min(containerWidth, containerHeight) * 0.1; // U shape thickness
-
-        //    //    // Calculate rectangle dimensions
-        //    //    double rectWidth = containerWidth - (4 * uThickness);
-        //    //    double rectHeight = containerHeight - (2 * uThickness);
-
-        //    //    Rectangle visualPlate = new Rectangle
-        //    //    {
-        //    //        Tag = plate,
-        //    //        Width = Math.Max(0, rectWidth),
-        //    //        Height = Math.Max(0, rectHeight),
-        //    //        VerticalAlignment = VerticalAlignment.Center,
-        //    //        HorizontalAlignment = HorizontalAlignment.Center,
-        //    //        Fill = fillColor
-        //    //    };
-        //    //    // Add the event handler
-        //    //    visualPlate.MouseLeftButtonDown += Plate_MouseLeftButtonDown;
-        //    //    //TODO unsubscribe when plate deleted?
-        //    //    // Add the rectangle to the existing containerGrid
-        //    //    containerGrid.Children.Add(visualPlate);
-        //    //}
-        //    if (Shelves.TryGetValue((row, column), out Grid containerGrid))
-        //    {
-        //        containerGrid.UpdateLayout();
-
-        //        double containerWidth = containerGrid.ActualWidth;
-        //        double containerHeight = containerGrid.ActualHeight;
-
-        //        if (containerWidth <= 0 || containerHeight <= 0)
-        //        {
-        //            containerWidth = containerGrid.Width;
-        //            containerHeight = containerGrid.Height;
-        //        }
-
-        //        // Create a plate with the same dimensions as the shelf
-        //        Path visualPlate = CreateShelf(containerWidth, containerHeight);
-        //        visualPlate.Tag = plate;
-        //        visualPlate.Fill = fillColor;
-        //        visualPlate.Opacity = 0.8; // Makes it slightly transparent to see overlap
-
-        //        // Enable dragging
-        //        visualPlate.MouseLeftButtonDown += Plate_MouseLeftButtonDown;
-        //        visualPlate.MouseMove += Plate_MouseMove;
-        //        visualPlate.MouseLeftButtonUp += Plate_MouseLeftButtonUp;
-
-        //        containerGrid.Children.Add(visualPlate);
-        //    }
-        //}
-
         public void AddPlateToShelf(int row, int column, Brush fillColor, Plate plate)
         {
             if (Shelves.TryGetValue((row, column), out Grid containerGrid))
             {
-                containerGrid.UpdateLayout();
-
-                double containerWidth = containerGrid.ActualWidth;
-                double containerHeight = containerGrid.ActualHeight;
-
-                if (containerWidth <= 0 || containerHeight <= 0)
+                Path shelf = containerGrid.Children.OfType<Path>().FirstOrDefault();
+                if (shelf?.Data is RectangleGeometry shelfGeometry)
                 {
-                    containerWidth = containerGrid.Width;
-                    containerHeight = containerGrid.Height;
+                    double width = shelfGeometry.Rect.Width;
+                    double height = shelfGeometry.Rect.Height;
+                    if (width <= 0 || height <= 0)
+                    {
+                        // Wait for layout to complete
+                        containerGrid.LayoutUpdated += (s, e) =>
+                        {
+                            if (containerGrid.ActualWidth > 0 && containerGrid.ActualHeight > 0)
+                            {
+                                CreatePlateInShelf(containerGrid, containerGrid.ActualWidth,
+                                                 containerGrid.ActualHeight, fillColor, plate);
+                            }
+                        };
+                    }
+                    else
+                    {
+                        CreatePlateInShelf(containerGrid, width, height,
+                                         fillColor, plate);
+                    }
                 }
+            }
+        }
 
-                Path visualPlate = CreateShelf(containerWidth, containerHeight);
-                visualPlate.Tag = plate;
-                visualPlate.Fill = fillColor;
-                visualPlate.Opacity = 0.8;
+        private void CreatePlateInShelf(Grid containerGrid, double width, double height,
+                                      Brush fillColor, Plate plate)
+        {
+            Path visualPlate = CreateShelf(width, height);
+            visualPlate.Tag = plate;
+            visualPlate.Fill = fillColor;
+            visualPlate.Opacity = 0.8;
 
-                // Add hardware acceleration - corrected syntax
-                RenderOptions.SetEdgeMode(visualPlate, EdgeMode.Aliased);
-                RenderOptions.SetBitmapScalingMode(visualPlate, BitmapScalingMode.LowQuality);
-                visualPlate.CacheMode = new BitmapCache();
+            // Enable dragging
+            visualPlate.MouseLeftButtonDown += Plate_MouseLeftButtonDown;
+            visualPlate.MouseMove += Plate_MouseMove;
+            visualPlate.MouseLeftButtonUp += Plate_MouseLeftButtonUp;
 
-                // Enable dragging
-                visualPlate.MouseLeftButtonDown += Plate_MouseLeftButtonDown;
-                visualPlate.MouseMove += Plate_MouseMove;
-                visualPlate.MouseLeftButtonUp += Plate_MouseLeftButtonUp;
-
-                containerGrid.Children.Add(visualPlate);
+            containerGrid.Children.Add(visualPlate);
+        }
+        private void UpdatePlateSize(Grid container, Path plate)
+        {
+            Path shelf = container.Children.OfType<Path>().FirstOrDefault();
+            if (shelf?.Data is RectangleGeometry shelfGeometry)
+            {
+                var newGeometry = new RectangleGeometry(
+                    new Rect(0, 0, shelfGeometry.Rect.Width, shelfGeometry.Rect.Height),
+                    shelfGeometry.RadiusX,
+                    shelfGeometry.RadiusY
+                );
+                plate.Data = newGeometry;
             }
         }
 
@@ -389,58 +361,30 @@ namespace PinTransferWPF
         private Point dragStartPosition;
         private bool isPositionInitialized = false;
         private Point offset;
+        private Point initialPlatePosition;
 
         private void Plate_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             draggedPlate = sender as Path;
             if (draggedPlate != null)
             {
-                // Calculate offset between mouse and plate's top-left corner
-                Point mousePos = e.GetPosition(draggedPlate);
-                offset = new Point(mousePos.X, mousePos.Y);
-
+                draggedPlate.CaptureMouse();
+                startPoint = e.GetPosition(MainGrid); // Use MainGrid for consistent coordinate space
                 sourceGrid = draggedPlate.Parent as Grid;
+                initialPlatePosition = draggedPlate.TranslatePoint(new Point(0, 0), MainGrid);
 
-                // Initialize transform
                 dragTransform = new TranslateTransform();
                 draggedPlate.RenderTransform = dragTransform;
 
-                // Set up hardware acceleration
-                RenderOptions.SetEdgeMode(draggedPlate, EdgeMode.Aliased);
-                RenderOptions.SetBitmapScalingMode(draggedPlate, BitmapScalingMode.LowQuality);
-                draggedPlate.CacheMode = new BitmapCache();
-
-                // Store original size and position
-                double originalWidth = draggedPlate.Width;
-                double originalHeight = draggedPlate.Height;
-
-                // Get absolute position before removing from source
-                Point platePosition = draggedPlate.TranslatePoint(new Point(0, 0), MainGrid);
-
-                // Move to main grid
                 sourceGrid.Children.Remove(draggedPlate);
                 MainGrid.Children.Add(draggedPlate);
 
-                // Set initial position in main grid
-                draggedPlate.Width = originalWidth;
-                draggedPlate.Height = originalHeight;
-                Canvas.SetLeft(draggedPlate, platePosition.X);
-                Canvas.SetTop(draggedPlate, platePosition.Y);
+                UpdatePlateSize(sourceGrid, draggedPlate);
+                dragTransform.X = initialPlatePosition.X;
+                dragTransform.Y = initialPlatePosition.Y;
+
                 Panel.SetZIndex(draggedPlate, 1000);
-
-                draggedPlate.CaptureMouse();
-                CompositionTarget.Rendering += UpdateDragPosition;
                 e.Handled = true;
-            }
-        }
-
-        private void UpdateDragPosition(object sender, EventArgs e)
-        {
-            if (draggedPlate != null)
-            {
-                Point currentPosition = Mouse.GetPosition(MainGrid);
-                Canvas.SetLeft(draggedPlate, currentPosition.X - offset.X);
-                Canvas.SetTop(draggedPlate, currentPosition.Y - offset.Y);
             }
         }
 
@@ -448,27 +392,34 @@ namespace PinTransferWPF
         {
             if (draggedPlate == null) return;
 
+            Point currentPosition = e.GetPosition(MainGrid);
+
             if (!isDragging)
             {
-                Point currentPosition = e.GetPosition(null);
                 Vector difference = startPoint - currentPosition;
-
                 if (Math.Abs(difference.X) > dragThreshold || Math.Abs(difference.Y) > dragThreshold)
                 {
                     isDragging = true;
                 }
             }
 
+            if (isDragging)
+            {
+                double offsetX = currentPosition.X - startPoint.X;
+                double offsetY = currentPosition.Y - startPoint.Y;
+
+                dragTransform.X = initialPlatePosition.X + offsetX;
+                dragTransform.Y = initialPlatePosition.Y + offsetY;
+            }
+
             e.Handled = true;
-        }
+            }
 
         private void Plate_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
         {
             if (draggedPlate != null)
             {
                 draggedPlate.ReleaseMouseCapture();
-                CompositionTarget.Rendering -= UpdateDragPosition;
-
                 if (isDragging)
                 {
                     try
@@ -491,50 +442,34 @@ namespace PinTransferWPF
                             }
                         }
 
-                        if (targetGrid != null)
+                        if (targetGrid != null && targetGrid != sourceGrid)
                         {
-                            try
+                            MainGrid.Children.Remove(draggedPlate);
+                            targetGrid.Children.Add(draggedPlate);
+                            dragTransform.X = 0;
+                            dragTransform.Y = 0;
+
+
+                            if (draggedPlate.Tag is Plate plate)
                             {
-                                // Remove from main grid and add to target
-                                MainGrid.Children.Remove(draggedPlate);
-                                dragTransform.X = 0;
-                                dragTransform.Y = 0;
-                                targetGrid.Children.Add(draggedPlate);
-
-                                draggedPlate.Width = targetGrid.ActualWidth;
-                                draggedPlate.Height = targetGrid.ActualHeight;
-
-                                if (draggedPlate.Tag is Plate plate)
+                                var targetPosition = GetGridPosition(targetGrid);
+                                if (targetPosition.HasValue)
                                 {
-                                    var targetPosition = GetGridPosition(targetGrid);
-                                    if (targetPosition.HasValue)
+                                    if (plate is SourcePlate sourcePlate)
                                     {
-                                        if (plate is SourcePlate sourcePlate)
-                                        {
-                                            sourcePlate.PositionInStack = targetPosition.Value.row;
-                                            sourcePlate.Stack = ColumnShift(targetPosition.Value.column + 1);
-                                        }
-                                        else if (plate is DestinationPlate destPlate)
-                                        {
-                                            destPlate.PositionInStack = targetPosition.Value.row;
-                                            destPlate.Stack = ColumnShift(targetPosition.Value.column + 1);
-                                        }
+                                        sourcePlate.PositionInStack = targetPosition.Value.row;
+                                        sourcePlate.Stack = ColumnShift(targetPosition.Value.column + 1);
+                                    }
+                                    else if (plate is DestinationPlate destPlate)
+                                    {
+                                        destPlate.PositionInStack = targetPosition.Value.row;
+                                        destPlate.Stack = ColumnShift(targetPosition.Value.column + 1);
                                     }
                                 }
-                            }
-                            catch (Exception ex)
-                            {
-                                // Return to source grid if error
-                                MainGrid.Children.Remove(draggedPlate);
-                                dragTransform.X = 0;
-                                dragTransform.Y = 0;
-                                sourceGrid.Children.Add(draggedPlate);
-                                System.Diagnostics.Debug.WriteLine($"Error moving plate: {ex.Message}");
                             }
                         }
                         else
                         {
-                            // Return to source grid if no valid target
                             MainGrid.Children.Remove(draggedPlate);
                             dragTransform.X = 0;
                             dragTransform.Y = 0;
@@ -543,11 +478,15 @@ namespace PinTransferWPF
                     }
                     finally
                     {
-                        Panel.SetZIndex(draggedPlate, 0);
+                         Panel.SetZIndex(draggedPlate, 0);
                     }
                 }
                 else
                 {
+                    MainGrid.Children.Remove(draggedPlate);
+                    dragTransform.X = 0;
+                    dragTransform.Y = 0;
+                    sourceGrid.Children.Add(draggedPlate);
                     HandlePlateClick();
                 }
 
