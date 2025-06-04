@@ -497,14 +497,19 @@ namespace Integration
             CS6GetErrorCode((short)ret);
         }
 
-        public async void StopAll()
+        public async Task StopAll()
         {
-            // TODO do these at same time async
-            m_spel.Stop(SpelStopType.StopAllTasks); // stops all Epson
-            m_spel.ResetAbort();
-            //AllRelaysOff(); // turn off all I/O devices
-            KX2.EmergencyStop(); // stops Arm
-            StopCS(); // stops carousel
+            // Create tasks for all operations that should run concurrently
+            var tasks = new List<Task>
+            {
+                Task.Run(() => m_spel.Stop(SpelStopType.StopAllTasks)),
+                Task.Run(() => m_spel.ResetAbort()),
+                Task.Run(() => KX2.EmergencyStop()),
+                Task.Run(() => StopCS())
+            };
+
+            // Wait for all tasks to complete
+            await Task.WhenAll(tasks);
         }
 
         public void OnShutdown()

@@ -11,11 +11,27 @@ using Integration;
 using PinTransferParameters;
 using System.Collections.Specialized;
 using System.Diagnostics;
+using System.Windows.Data;
+using System.Windows.Controls;
+using System.Windows.Input;
 
 namespace ViewModels
 {
     using static Integration.RunLogger;
     using StackType = HotelStacker;
+
+    public class AddButtonViewModel : ObservableObject
+    {
+        public string Type { get; set; }  // "Source" or "Destination"
+        public ICommand AddCommand { get; }
+
+        public AddButtonViewModel(string type, ICommand addCommand)
+        {
+            Type = type;
+            AddCommand = addCommand;
+        }
+    }
+
     public partial class MainViewModel : ObservableObject
     {
         public InstrumentController _instrumentController;
@@ -30,6 +46,19 @@ namespace ViewModels
         private int _stackCapacity = 25; //TODO calculate programatically
         string connectionString = "Data Source=" + Parameters.LoggingDatabase;
         private ObservableCollection<SourcePlate> _sourcePlates;
+        private ObservableCollection<int> _pinVolumes;
+        public ObservableCollection<int> PinVolumes
+        {
+            get => _pinVolumes;
+            set
+            {
+                if (value != _pinVolumes)
+                {
+                    _pinVolumes = value;
+                    OnPropertyChanged(nameof(PinVolumes));
+                }
+            }
+        }
         public ObservableCollection<SourcePlate> SourcePlates
         {
             get => _sourcePlates;
@@ -56,10 +85,26 @@ namespace ViewModels
             }
         }
 
+        [ObservableProperty]
+        private ObservableCollection<object> _sourceItemsWithAddButton;
+
+        [ObservableProperty]
+        private ObservableCollection<object> _destinationItemsWithAddButton;
+
+        [ObservableProperty]
+        private bool _isInSourceAddMode = false;
+
+        [ObservableProperty]
+        private bool _isInDestAddMode = false;
+
+        [ObservableProperty]
+        private int _selectedTransferVolume = 100; //TODO fix
+
         public MainViewModel(InstrumentController instrumentController, string connectionString)
         {
             SourcePlates = new ObservableCollection<SourcePlate>();
             DestinationPlates = new ObservableCollection<DestinationPlate>();
+            PinVolumes = new ObservableCollection<int>();
             Func<int, StackType> stackerFactory = _stackCapacity => new StackType(_stackCapacity);
             _carousel = new Carousel<StackType>(_numStacks, _stackCapacity, stackerFactory);
             _instrumentController = instrumentController;
@@ -68,6 +113,28 @@ namespace ViewModels
             _parser = new JournalParser<StackType>(connectionString, _events, _carousel);
             _epsonRunner = new CommandRunner<StackType>(_parser, "Epson", _runLogger, _events);
             _kx2Runner = new CommandRunner<StackType>(_parser, "KX2", _runLogger, _events);
+
+            SourceItemsWithAddButton = new ObservableCollection<object>();
+            DestinationItemsWithAddButton = new ObservableCollection<object>();
+
+            // Create add buttons
+            var addSourceButton = new AddButtonViewModel("Source", new RelayCommand<string>(_ => StartAddSourcePlate()));
+            var addDestinationButton = new AddButtonViewModel("Destination", new RelayCommand<string>(_ => StartAddDestinationPlate()));
+
+
+            // Watch for changes to plates collections
+            SourcePlates.CollectionChanged += (s, e) => UpdateSourceItemsCollection(addSourceButton);
+            DestinationPlates.CollectionChanged += (s, e) => UpdateDestinationItemsCollection(addDestinationButton);
+
+            // Initialize with add buttons
+            UpdateSourceItemsCollection(addSourceButton);
+            UpdateDestinationItemsCollection(addDestinationButton);
+
+            // TODO: fix hardcoding..
+            PinVolumes.Add(33);
+            PinVolumes.Add(100);
+            PinVolumes.Add(300);
+
             if (Parameters.UsingInstruments)
             {
                 SetupEventHandlers();
@@ -79,6 +146,348 @@ namespace ViewModels
 
             CheckForUnfinishedRun(connectionString);
         }
+
+        private void UpdateSourceItemsCollection(AddButtonViewModel addButton)
+        {
+            SourceItemsWithAddButton.Clear();
+            foreach (var plate in SourcePlates)
+                SourceItemsWithAddButton.Add(plate);
+            SourceItemsWithAddButton.Add(addButton);
+        }
+
+        private void UpdateDestinationItemsCollection(AddButtonViewModel addButton)
+        {
+            DestinationItemsWithAddButton.Clear();
+            foreach (var plate in DestinationPlates)
+                DestinationItemsWithAddButton.Add(plate);
+            DestinationItemsWithAddButton.Add(addButton);
+        }
+        private void StartAddSourcePlate()
+        {
+            // Clear all selections first
+            ClearAllPlateSelections();
+
+            // Exit other add mode if active
+            if (IsInDestAddMode)
+            {
+                IsInDestAddMode = false;
+
+            }
+            IsInSourceAddMode = true;
+            StatusText += "Please select destination plates to link, then click Confirm Add Source Plate\n";
+
+            // Notify UI that we're in add mode
+            OnPropertyChanged(nameof(IsInSourceAddMode));
+        }
+
+        private void StartAddDestinationPlate()
+        {
+            // Clear all selections first
+            ClearAllPlateSelections();
+
+            if (IsInSourceAddMode)
+            {
+                IsInSourceAddMode = false;
+            }
+
+            IsInDestAddMode = true;
+            StatusText += "Please select source plates to link, then click Confirm Add Destination Plate\n";
+
+            // Notify UI that we're in add mode
+            OnPropertyChanged(nameof(IsInDestAddMode));
+        }
+
+        // AI
+        [RelayCommand]
+        private void ConfirmAddSourcePlate()
+        {
+            if (!IsInSourceAddMode) return;
+
+            // Get selected destination plates
+            var selectedDestPlates = new List<DestinationPlate>();
+            foreach (var destPlate in DestinationPlates)
+            {
+                if (destPlate.IsSelected)
+                    selectedDestPlates.Add(destPlate);
+            }
+
+            if (selectedDestPlates.Count == 0)
+            {
+                StatusText += "No destination plates selected. Canceled adding source plate.\n";
+                IsInSourceAddMode = false;
+                return;
+            }
+
+            // Create new source plate
+            int currentSourcePlates = SourcePlates.Count();
+            int startingStack = currentSourcePlates / _stackCapacity;
+            int finalStack = startingStack;
+            int startingPosition = currentSourcePlates - ((startingStack) * (_stackCapacity));
+            int finalPosition = startingPosition;
+
+            var newSourcePlate = new SourcePlate
+            {
+                ID = "source_" + (SourcePlates.Count + 1).ToString(),
+                Stack = startingStack,
+                FinalStack = finalStack,
+                PositionInStack = startingPosition,
+                FinalPositionInStack = finalPosition,
+                Status = new Dictionary<string, bool>() { { "pinned", false } },
+                Replicates = new Tuple<int, int>(SelectedTransferVolume, selectedDestPlates.Count)
+            };
+
+            // Add the source plate
+            SourcePlates.Add(newSourcePlate);
+
+            // Link to selected destination plates
+            foreach (var destPlate in selectedDestPlates)
+            {
+                destPlate.AddSourcePlate(newSourcePlate.ID, SelectedTransferVolume);
+            }
+
+            StatusText += $"Added source plate {newSourcePlate.ID} linked to {selectedDestPlates.Count} destination plates\n";
+            IsInSourceAddMode = false;
+
+            // Set as selected plate after it's added
+            HighlightSelectedPlate(newSourcePlate);
+        }
+
+        [RelayCommand]
+        private void ConfirmAddDestinationPlate()
+        {
+            if (!IsInDestAddMode) return;
+
+            // Get selected source plates
+            var selectedSourcePlates = new List<SourcePlate>();
+            foreach (var sourcePlate in SourcePlates)
+            {
+                if (sourcePlate.IsSelected)
+                    selectedSourcePlates.Add(sourcePlate);
+            }
+
+            if (selectedSourcePlates.Count == 0)
+            {
+                StatusText += "No source plates selected. Canceled adding destination plate.\n";
+                IsInDestAddMode = false;
+                return;
+            }
+
+            // Calculate position for the new destination plate
+            int startingStack = (_numStacks - 1) - (DestinationPlates.Count / _stackCapacity);
+            int finalStack = startingStack;
+            int startingPosition = DestinationPlates.Count() - (((_numStacks - 1) - startingStack) * _stackCapacity);
+            int finalPosition = startingPosition;
+
+            // Create the new destination plate
+            var newDestPlate = new DestinationPlate
+            {
+                ID = "destination_" + (DestinationPlates.Count + 1).ToString(),
+                Stack = startingStack,
+                FinalStack = finalStack,
+                PositionInStack = startingPosition,
+                FinalPositionInStack = finalPosition,
+                Status = new Dictionary<string, bool>() { { "pinned", false } }
+            };
+
+            // Add the source connections
+            foreach (var sourcePlate in selectedSourcePlates)
+            {
+                newDestPlate.AddSourcePlate(sourcePlate.ID, SelectedTransferVolume);
+            }
+
+            // Add the destination plate
+            DestinationPlates.Add(newDestPlate);
+
+            StatusText += $"Added destination plate {newDestPlate.ID} linked to {selectedSourcePlates.Count} source plates\n";
+            IsInDestAddMode = false;
+
+            // Set as selected plate after it's added
+            HighlightSelectedPlate(newDestPlate);
+        }
+
+        // AI
+        // Add this event to your MainViewModel class
+        public event EventHandler MultiSelectionReset;
+
+        // Then modify the CancelAddPlate method
+        [RelayCommand]
+        private void CancelAddPlate()
+        {
+            if (IsInSourceAddMode)
+            {
+                IsInSourceAddMode = false;
+                StatusText += "Canceled adding source plate.\n";
+
+                // Reset selections
+                foreach (var destPlate in DestinationPlates)
+                {
+                    destPlate.IsSelected = false;
+                    destPlate.SelectionColor = null;
+                }
+            }
+
+            if (IsInDestAddMode)
+            {
+                IsInDestAddMode = false;
+                StatusText += "Canceled adding destination plate.\n";
+
+                // Reset selections
+                foreach (var sourcePlate in SourcePlates)
+                {
+                    sourcePlate.IsSelected = false;
+                    sourcePlate.SelectionColor = null;
+                }
+            }
+
+            // Raise the event to notify MainWindow to reset its multi-selection state
+            MultiSelectionReset?.Invoke(this, EventArgs.Empty);
+
+            // Notify that plate visuals need to be updated
+            PlateVisualsNeedUpdate?.Invoke(this, EventArgs.Empty);
+        }
+
+        //AI
+        [RelayCommand]
+        private void DeletePlate(object parameter)
+        {
+            if (parameter is SourcePlate sourcePlate)
+            {
+                // First, remove references from destination plates
+                foreach (var destPlate in DestinationPlates.ToList())
+                {
+                    destPlate.SourcePlates.Remove(sourcePlate.ID);
+                }
+
+                // Remove the plate from the carousel if it exists there
+                if (_carousel != null)
+                {
+                    try
+                    {
+                        // Try to find the plate in any stacker
+                        bool found = false;
+                        for (int i = 0; i < _carousel.Stackers.Count; i++)
+                        {
+                            // Check if the plate exists in this stacker's Plates collection
+                            if (_carousel.Stackers[i].Plates.Any(p => p.ID == sourcePlate.ID))
+                            {
+                                // Update the plate's Stack property to match where it actually is
+                                sourcePlate.Stack = i + 1;
+                                _carousel.RemovePlate(sourcePlate);
+                                found = true;
+                                break;
+                            }
+                        }
+
+                        if (!found)
+                        {
+                            // If not found in any stacker, skip carousel removal
+                            StatusText += $"Note: Plate {sourcePlate.ID} was not found in carousel stackers\n";
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        // Log exception but continue with deletion
+                        StatusText += $"Warning: {ex.Message} (Carousel removal)\n";
+                    }
+                }
+
+                // Then remove the plate itself
+                SourcePlates.Remove(sourcePlate);
+                StatusText += $"Deleted source plate {sourcePlate.ID}\n";
+            }
+            else if (parameter is DestinationPlate destPlate)
+            {
+                // Remove the plate from carousel if it exists there
+                if (_carousel != null)
+                {
+                    try
+                    {
+                        // Try to find the plate in any stacker
+                        bool found = false;
+                        for (int i = 0; i < _carousel.Stackers.Count; i++)
+                        {
+                            // Check if the plate exists in this stacker's Plates collection
+                            if (_carousel.Stackers[i].Plates.Any(p => p.ID == destPlate.ID))
+                            {
+                                // Update the plate's Stack property to match where it actually is
+                                destPlate.Stack = i + 1;
+                                _carousel.RemovePlate(destPlate);
+                                found = true;
+                                break;
+                            }
+                        }
+
+                        if (!found)
+                        {
+                            // If not found in any stacker, skip carousel removal
+                            StatusText += $"Note: Plate {destPlate.ID} was not found in carousel stackers\n";
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        // Log exception but continue with deletion
+                        StatusText += $"Warning: {ex.Message} (Carousel removal)\n";
+                    }
+                }
+
+                // Remove the destination plate
+                DestinationPlates.Remove(destPlate);
+                StatusText += $"Deleted destination plate {destPlate.ID}\n";
+            }
+
+            // Clear any selections
+            ClearAllPlateSelections();
+
+            // Update UI collections
+            UpdateSourceItemsCollection(new AddButtonViewModel("Source", new RelayCommand<string>(_ => StartAddSourcePlate())));
+            UpdateDestinationItemsCollection(new AddButtonViewModel("Destination", new RelayCommand<string>(_ => StartAddDestinationPlate())));
+
+            // Trigger visual update for the stacker
+            PlateVisualsNeedUpdate?.Invoke(this, EventArgs.Empty);
+        }
+
+        //AI
+        [RelayCommand]
+        private void ClearAllPlates()
+        {
+            // Ask for confirmation
+            //MessageBoxResult result = MessageBox.Show("Are you sure you want to delete all plates?",
+            //                                         "Confirmation",
+            //                                         MessageBoxButton.YesNo,
+            //                                         MessageBoxImage.Question);
+            MessageBoxResult result = MessageBoxResult.Yes;
+            if (result == MessageBoxResult.Yes)
+            {
+                // Clear carousel if it exists
+                if (_carousel != null)
+                {
+                    try
+                    {
+                        // Use the built-in method to remove all plates
+                        _carousel.RemoveAllPlates();
+                    }
+                    catch (Exception ex)
+                    {
+                        // Log exception but continue with clearing
+                        StatusText += $"Warning: {ex.Message} (Carousel clearing)\n";
+                    }
+                }
+
+                // Clear all plates
+                SourcePlates.Clear();
+                DestinationPlates.Clear();
+
+                // Update the collections with add buttons
+                UpdateSourceItemsCollection(new AddButtonViewModel("Source", new RelayCommand<string>(_ => StartAddSourcePlate())));
+                UpdateDestinationItemsCollection(new AddButtonViewModel("Destination", new RelayCommand<string>(_ => StartAddDestinationPlate())));
+
+                // Trigger visual update for the stacker
+                PlateVisualsNeedUpdate?.Invoke(this, EventArgs.Empty);
+
+                StatusText += "All plates cleared.\n";
+            }
+        }
+
         private void CheckForUnfinishedRun(string connectionString)
         {
             var lastUnfinishedRunState = _runLogger.LoadMostRecentUnfinishedRunState();
@@ -135,7 +544,7 @@ namespace ViewModels
             TimeRun = DateTime.Now,
             ScreenNumber = -1,
             UserName = "Bryce",
-            JournalID = "testJournal"
+            JournalID = "testJournal8"
         };
 
         private void AppendStatus(string message)
@@ -244,6 +653,25 @@ namespace ViewModels
                     plate.AddSourcePlate(sourcePlate.ID, sourcePlate.Replicates.Item2);
                 }
             }
+
+            // Select the last created source plate if any were created
+            if (SourcesToAdd > 0)
+            {
+                var lastSourcePlate = SourcePlates.LastOrDefault();
+                if (lastSourcePlate != null)
+                {
+                    HighlightSelectedPlate(lastSourcePlate);
+                }
+            }
+            // If no source plates were created but destination plates were, select the last destination plate
+            else if (DestinationPlates.Count > 0)
+            {
+                var lastDestPlate = DestinationPlates.LastOrDefault();
+                if (lastDestPlate != null)
+                {
+                    HighlightSelectedPlate(lastDestPlate);
+                }
+            }
         }
 
         [RelayCommand]
@@ -254,7 +682,7 @@ namespace ViewModels
             {
                 JournalInfo journalInfo = new JournalInfo
                 {
-                    JournalID = "testJournal2",
+                    JournalID = "testJournal8",
                     SourcePlates = SourcePlates.ToList(),
                     DestinationPlates = DestinationPlates.ToList()
                 };
@@ -312,7 +740,7 @@ namespace ViewModels
                     });
                 }
             }
-            string currentJournalID = "testJournal"; // Replace with actual journal ID
+            string currentJournalID = "testJournal8"; // Replace with actual journal ID
             _events.ResetEvents();
             string serializedPlates = _runLogger.LoadRunState(currentJournalID).InitialPlates;
             List<Plate> deserializedPlates = PlateSerializer.DeserializePlates(serializedPlates);
@@ -360,7 +788,7 @@ namespace ViewModels
         [RelayCommand]
         private async Task ResumeRun()
         {
-            var lastRunState = _runLogger.LoadRunState("testJournal"); // TODO: Replace with actual journal ID
+            var lastRunState = _runLogger.LoadRunState("testJournal8"); // TODO: Replace with actual journal ID
             if (Parameters.UsingInstruments)
             {
                 if (!_instrumentController.KX2.IsInitialized())
@@ -446,13 +874,133 @@ namespace ViewModels
             }
         }
 
+        // Add these properties to MainViewModel class
+        [ObservableProperty]
+        private SourcePlate _currentlySelectedSourcePlate;
+
+        [ObservableProperty]
+        private DestinationPlate _currentlySelectedDestinationPlate;
+
+        // These methods handle the visualization of selected plates
+        // Add this to MainViewModel class
+        public event EventHandler PlateVisualsNeedUpdate;
+
+        // AI
+        public void HighlightSelectedPlate(Plate selectedPlate)
+        {
+            // Clear previous selections first
+            ClearAllPlateSelections();
+
+            if (selectedPlate is SourcePlate sourcePlate)
+            {
+                // Set this plate as selected with primary color
+                CurrentlySelectedSourcePlate = sourcePlate;
+                sourcePlate.IsSelected = true;
+                sourcePlate.SelectionColor = "Primary";
+
+                // Clear any previously selected destination plate
+                CurrentlySelectedDestinationPlate = null;
+
+                // Highlight linked destination plates with secondary color
+                foreach (var linkedDestPlate in DestinationPlates)
+                {
+                    if (linkedDestPlate.SourcePlates.Any(sp => sp.Key == sourcePlate.ID))
+                    {
+                        linkedDestPlate.IsSelected = true;
+                        linkedDestPlate.SelectionColor = "Secondary";
+                    }
+                }
+            }
+            else if (selectedPlate is DestinationPlate destPlate)
+            {
+                // Set this plate as selected with primary color
+                CurrentlySelectedDestinationPlate = destPlate;
+                destPlate.IsSelected = true;
+                destPlate.SelectionColor = "Primary";
+
+                // Clear any previously selected source plate
+                CurrentlySelectedSourcePlate = null;
+
+                // Highlight linked source plates with secondary color
+                foreach (var linkedSourcePlate in SourcePlates)
+                {
+                    if (destPlate.SourcePlates.Any(sp => sp.Key == linkedSourcePlate.ID))
+                    {
+                        linkedSourcePlate.IsSelected = true;
+                        linkedSourcePlate.SelectionColor = "Secondary";
+                    }
+                }
+            }
+
+            // Trigger UI update
+            OnPropertyChanged(nameof(SourcePlates));
+            OnPropertyChanged(nameof(DestinationPlates));
+
+            // Notify that plate visuals need to be updated
+            PlateVisualsNeedUpdate?.Invoke(this, EventArgs.Empty);
+        }
+
+        public void ClearAllPlateSelections()
+        {
+            foreach (var plate in SourcePlates)
+            {
+                plate.IsSelected = false;
+                plate.SelectionColor = null;
+            }
+
+            foreach (var plate in DestinationPlates)
+            {
+                plate.IsSelected = false;
+                plate.SelectionColor = null;
+            }
+
+            CurrentlySelectedSourcePlate = null;
+            CurrentlySelectedDestinationPlate = null;
+
+            // Notify that plate visuals need to be updated
+            PlateVisualsNeedUpdate?.Invoke(this, EventArgs.Empty);
+        }
+
+        //AI
+        public void TogglePlateSelection(Plate plate)
+        {
+            if (IsInSourceAddMode && plate is DestinationPlate destPlate)
+            {
+                // In source add mode, toggle destination plate selection
+                destPlate.IsSelected = !destPlate.IsSelected;
+                destPlate.SelectionColor = destPlate.IsSelected ? "Secondary" : null;
+                OnPropertyChanged(nameof(DestinationPlates));
+                PlateVisualsNeedUpdate?.Invoke(this, EventArgs.Empty);
+            }
+            else if (IsInDestAddMode && plate is SourcePlate sourcePlate)
+            {
+                // In destination add mode, toggle source plate selection
+                sourcePlate.IsSelected = !sourcePlate.IsSelected;
+                sourcePlate.SelectionColor = sourcePlate.IsSelected ? "Secondary" : null;
+                OnPropertyChanged(nameof(SourcePlates));
+                PlateVisualsNeedUpdate?.Invoke(this, EventArgs.Empty);
+            }
+            else if (!IsInSourceAddMode && !IsInDestAddMode)
+            {
+                // Normal mode, use normal highlighting
+                HighlightSelectedPlate(plate);
+            }
+        }
+
         partial void OnSelectedSourcePlateChanged(Plate value)
         {
-            // TODO find source plate in visual stack and select
+            if (value != null)
+            {
+                HighlightSelectedPlate(value);
+            }
         }
+
         partial void OnSelectedDestinationPlateChanged(Plate value)
         {
-            // TODO find destination plate in visual stack and select
+            if (value != null)
+            {
+                HighlightSelectedPlate(value);
+            }
         }
 
         private void OpenSaveScriptWindow()

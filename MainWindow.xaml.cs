@@ -19,10 +19,11 @@ namespace PinTransferWPF
 {
     using StackType = HotelStacker;
     [INotifyPropertyChanged]
+
     public partial class MainWindow : Window
     {
         public MainViewModel ViewModel { get; }
-        MessageBoxResult messageBoxResult;
+        //MessageBoxResult messageBoxResult;
         private InstrumentController _instrumentController;
         private DispatcherTimer resizeTimer;
         private Dictionary<(int, int), Grid> Shelves = new Dictionary<(int, int), Grid>();
@@ -70,6 +71,9 @@ namespace PinTransferWPF
                                           connectionString);
             DataContext = ViewModel;
 
+            // Subscribe to the plate visuals update event
+            ViewModel.PlateVisualsNeedUpdate += ViewModel_PlateVisualsNeedUpdate;
+
             // Subscribe to the CloseWindowRequested event
             ViewModel.CloseWindowRequested += (sender, args) => this.Close();
 
@@ -87,6 +91,9 @@ namespace PinTransferWPF
 
             // Subscribe to the PlateSelected event
             PlateSelected += SelectPlate;
+
+            // Subscribe to multi plate selection
+            ViewModel.MultiSelectionReset += (sender, args) => ResetMultiSelectionState();
 
             // Bind the Window's StateChanged event to update the ViewModel
             StateChanged += (sender, args) => ViewModel.WindowState = WindowState;
@@ -112,6 +119,52 @@ namespace PinTransferWPF
             resizeTimer = new DispatcherTimer();
             resizeTimer.Interval = TimeSpan.FromMilliseconds(250);
             resizeTimer.Tick += ResizeTimer_Tick;
+        }
+
+        //AI
+        // fields to track last selected item
+        private int lastSelectedSourceIndex = -1;
+        private int lastSelectedDestIndex = -1;
+        private void ResetMultiSelectionState()
+        {
+            lastSelectedSourceIndex = -1;
+            lastSelectedDestIndex = -1;
+        }
+
+        private void ViewModel_PlateVisualsNeedUpdate(object sender, EventArgs e)
+        {
+            UpdateAllStackerPlateVisuals();
+        }
+
+        private void RemoveDeletedPlatesFromVisualStacker()
+        {
+            // Check all visual plates in the stacker and remove any that are no longer in ViewModel collections
+            foreach (var kvp in Shelves)
+            {
+                var grid = kvp.Value;
+                List<Path> platesToRemove = new List<Path>();
+
+                foreach (Path platePath in grid.Children.OfType<Path>().Where(p => p.Tag is Plate))
+                {
+                    Plate plate = platePath.Tag as Plate;
+
+                    // If this plate is no longer in the collections, mark it for removal
+                    bool stillExists = false;
+                    if (plate is SourcePlate)
+                        stillExists = ViewModel.SourcePlates.Any(sp => sp.ID == plate.ID);
+                    else if (plate is DestinationPlate)
+                        stillExists = ViewModel.DestinationPlates.Any(dp => dp.ID == plate.ID);
+
+                    if (!stillExists)
+                        platesToRemove.Add(platePath);
+                }
+
+                // Remove the plates that no longer exist
+                foreach (var plateToRemove in platesToRemove)
+                {
+                    grid.Children.Remove(plateToRemove);
+                }
+            }
         }
 
         private void MainWindow_Loaded(object sender, RoutedEventArgs e)
@@ -236,15 +289,15 @@ namespace PinTransferWPF
             {
                 if (Shelves.TryGetValue((row, column), out Grid containerGrid))
                 {
-                    UpdatePlateSize(containerGrid, plate);
                     containerGrid.Children.Add(plate);
+                    UpdatePlateSize(containerGrid, plate);
                 }
             }
         }
 
         private Path CreateShelf(double width, double height)
         {
-            double cornerRadius = Math.Min(width, height) * 0.15;
+            double cornerRadius = Math.Min(width, height) * 0.25;
 
             var geometry = new RectangleGeometry(
                 new Rect(0, 0, width, height),
@@ -252,11 +305,19 @@ namespace PinTransferWPF
                 cornerRadius
             );
 
+            //return new Path
+            //{
+            //    Data = geometry,
+            //    Fill = backgroundColor,
+            //    Stroke = Brushes.Transparent,
+            //    StrokeThickness = 1
+            //};
+
             return new Path
             {
                 Data = geometry,
-                Fill = backgroundColor,
-                Stroke = Brushes.Transparent,
+                Fill = Brushes.Transparent,
+                Stroke = primaryColor,
                 StrokeThickness = 1
             };
 
@@ -352,15 +413,15 @@ namespace PinTransferWPF
         }
 
         private TranslateTransform dragTransform;
-        private CompositionTarget compositionTarget;
+        //private CompositionTarget compositionTarget;
         private bool isDragging = false;
         private Point startPoint;
         private Path draggedPlate;
         private Grid sourceGrid;
-        private const double dragThreshold = 5.0; // Pixels of movement before considering it a drag
-        private Point dragStartPosition;
-        private bool isPositionInitialized = false;
-        private Point offset;
+        private const double dragThreshold = 10.0; // Pixels of movement before considering it a drag
+        //private Point dragStartPosition;
+        //private bool isPositionInitialized = false;
+        //private Point offset;
         private Point initialPlatePosition;
 
         private void Plate_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -368,6 +429,15 @@ namespace PinTransferWPF
             draggedPlate = sender as Path;
             if (draggedPlate != null)
             {
+                // Get the actual size in screen coordinates
+                Point topLeft = draggedPlate.TransformToAncestor(MainGrid).Transform(new Point(0, 0));
+                Point bottomRight = draggedPlate.TransformToAncestor(MainGrid).Transform(new Point(
+                    ((RectangleGeometry)draggedPlate.Data).Rect.Width,
+                    ((RectangleGeometry)draggedPlate.Data).Rect.Height));
+
+                double actualWidth = Math.Abs(bottomRight.X - topLeft.X);
+                double actualHeight = Math.Abs(bottomRight.Y - topLeft.Y);
+
                 draggedPlate.CaptureMouse();
                 startPoint = e.GetPosition(MainGrid); // Use MainGrid for consistent coordinate space
                 sourceGrid = draggedPlate.Parent as Grid;
@@ -377,9 +447,18 @@ namespace PinTransferWPF
                 draggedPlate.RenderTransform = dragTransform;
 
                 sourceGrid.Children.Remove(draggedPlate);
+
+                // Set the new geometry with the actual screen size before adding to MainGrid
+                draggedPlate.Data = new RectangleGeometry(
+                    new Rect(0, 0, actualWidth, actualHeight),
+                    ((RectangleGeometry)draggedPlate.Data).RadiusX,
+                    ((RectangleGeometry)draggedPlate.Data).RadiusY
+                );
+
+
                 MainGrid.Children.Add(draggedPlate);
 
-                UpdatePlateSize(sourceGrid, draggedPlate);
+                //UpdatePlateSize(sourceGrid, draggedPlate);
                 dragTransform.X = initialPlatePosition.X;
                 dragTransform.Y = initialPlatePosition.Y;
 
@@ -446,6 +525,7 @@ namespace PinTransferWPF
                         {
                             MainGrid.Children.Remove(draggedPlate);
                             targetGrid.Children.Add(draggedPlate);
+                            UpdatePlateSize(targetGrid, draggedPlate);
                             dragTransform.X = 0;
                             dragTransform.Y = 0;
 
@@ -455,15 +535,22 @@ namespace PinTransferWPF
                                 var targetPosition = GetGridPosition(targetGrid);
                                 if (targetPosition.HasValue)
                                 {
+                                    //TODO: final positions being set assumes no dynamic plate handling
                                     if (plate is SourcePlate sourcePlate)
                                     {
                                         sourcePlate.PositionInStack = targetPosition.Value.row;
-                                        sourcePlate.Stack = ColumnShift(targetPosition.Value.column + 1);
+                                        sourcePlate.Stack = ColumnShift(targetPosition.Value.column + 1) - 1;
+
+                                        sourcePlate.FinalPositionInStack = targetPosition.Value.row;
+                                        sourcePlate.FinalStack = ColumnShift(targetPosition.Value.column + 1) - 1;
                                     }
                                     else if (plate is DestinationPlate destPlate)
                                     {
                                         destPlate.PositionInStack = targetPosition.Value.row;
-                                        destPlate.Stack = ColumnShift(targetPosition.Value.column + 1);
+                                        destPlate.Stack = ColumnShift(targetPosition.Value.column + 1) - 1;
+
+                                        destPlate.FinalPositionInStack = targetPosition.Value.row;
+                                        destPlate.FinalStack = ColumnShift(targetPosition.Value.column + 1) - 1;
                                     }
                                 }
                             }
@@ -474,6 +561,7 @@ namespace PinTransferWPF
                             dragTransform.X = 0;
                             dragTransform.Y = 0;
                             sourceGrid.Children.Add(draggedPlate);
+                            UpdatePlateSize(sourceGrid, draggedPlate);
                         }
                     }
                     finally
@@ -487,6 +575,7 @@ namespace PinTransferWPF
                     dragTransform.X = 0;
                     dragTransform.Y = 0;
                     sourceGrid.Children.Add(draggedPlate);
+                    UpdatePlateSize(sourceGrid, draggedPlate);
                     HandlePlateClick();
                 }
 
@@ -497,6 +586,42 @@ namespace PinTransferWPF
             }
         }
 
+        private void ListViewItem_RightClick(object sender, MouseButtonEventArgs e)
+        {
+            ListViewItem item = sender as ListViewItem;
+            if (item?.Content is Plate plate)
+            {
+                // Create context menu
+                ContextMenu contextMenu = new ContextMenu();
+
+                // Add delete menu item
+                MenuItem deleteMenuItem = new MenuItem();
+                deleteMenuItem.Header = "Delete";
+                deleteMenuItem.Command = ViewModel.DeletePlateCommand;
+                deleteMenuItem.CommandParameter = plate;
+
+                contextMenu.Items.Add(deleteMenuItem);
+
+                // Show the context menu
+                contextMenu.IsOpen = true;
+
+                e.Handled = true;
+            }
+        }
+
+        private void ListViewItem_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Delete)
+            {
+                ListViewItem item = sender as ListViewItem;
+                if (item?.Content is Plate plate)
+                {
+                    ViewModel.DeletePlateCommand.Execute(plate);
+                    e.Handled = true;
+                }
+            }
+
+        }
         // helper method to find the grid position
         private (int row, int column)? GetGridPosition(Grid grid)
         {
@@ -514,34 +639,64 @@ namespace PinTransferWPF
         {
             if (draggedPlate.Tag is Plate plate)
             {
-                draggedPlate.Fill = (draggedPlate.Fill == selectedPlateColor)
-                    ? unselectedPlateColor
-                    : selectedPlateColor;
-
-                if (plate is SourcePlate)
-                {
-                    ViewModel.SelectedSourcePlate = plate;
-                }
-                else if (plate is DestinationPlate)
-                {
-                    ViewModel.SelectedDestinationPlate = plate;
-                }
+                // This will correctly highlight the plate as primary and its connections as secondary
+                ViewModel.TogglePlateSelection(plate);
             }
         }
 
+        // Update the OnPlatesChanged method
         public void OnPlatesChanged(object sender, NotifyCollectionChangedEventArgs e)
         {
             if (e.NewItems != null)
             {
                 foreach (var item in e.NewItems)
                 {
-                    if (item.GetType() == typeof(SourcePlate))
+                    if (item is SourcePlate sourcePlate)
                     {
-                        AddPlateToShelf(((SourcePlate)item).PositionInStack, ColumnShift(((SourcePlate)item).Stack), unselectedPlateColor, (SourcePlate)item);
+                        AddPlateToShelf(sourcePlate.PositionInStack, ColumnShift(sourcePlate.Stack), unselectedPlateColor, sourcePlate);
                     }
-                    else if (item.GetType() == typeof(DestinationPlate))
+                    else if (item is DestinationPlate destPlate)
                     {
-                        AddPlateToShelf(((DestinationPlate)item).PositionInStack, ColumnShift(((DestinationPlate)item).Stack), unselectedPlateColor, (DestinationPlate)item);
+                        AddPlateToShelf(destPlate.PositionInStack, ColumnShift(destPlate.Stack), unselectedPlateColor, destPlate);
+                    }
+                }
+            }
+
+            // Update all stacker plate visuals
+            UpdateAllStackerPlateVisuals();
+        }
+
+        private void UpdateAllStackerPlateVisuals()
+        {
+            // First remove any deleted plates
+            RemoveDeletedPlatesFromVisualStacker();
+
+            foreach (var kvp in Shelves)
+            {
+                Grid grid = kvp.Value;
+                foreach (Path platePath in grid.Children.OfType<Path>().Where(p => p.Tag is Plate))
+                {
+                    if (platePath.Tag is Plate plate)
+                    {
+                        if (plate.IsSelected)
+                        {
+                            if (plate.SelectionColor == "Primary")
+                            {
+                                platePath.Fill = (SolidColorBrush)FindResource("PrimaryBrush");
+                                platePath.Opacity = 1.0;
+                            }
+                            else if (plate.SelectionColor == "Secondary")
+                            {
+                                platePath.Fill = (SolidColorBrush)FindResource("SecondaryBrush");
+                                platePath.Opacity = 0.8;
+                            }
+                        }
+                        else
+                        {
+                            // Unselected plate
+                            platePath.Fill = backgroundColor; // Use background color for unselected
+                            platePath.Opacity = 0.6;
+                        }
                     }
                 }
             }
@@ -609,5 +764,128 @@ namespace PinTransferWPF
         }
 
         public event EventHandler WindowDragRequested;
+
+        private void SourceListView_ItemClicked(object sender, MouseButtonEventArgs e)
+        {
+            ListViewItem item = sender as ListViewItem;
+            if (item?.Content is SourcePlate plate)
+            {
+                if (ViewModel.IsInDestAddMode)
+                {
+                    int currentIndex = ViewModel.SourcePlates.IndexOf(plate);
+
+                    // Check if Shift key is pressed
+                    if (Keyboard.IsKeyDown(Key.LeftShift) || Keyboard.IsKeyDown(Key.RightShift))
+                    {
+                        // If we have a previous selection
+                        if (lastSelectedSourceIndex >= 0)
+                        {
+                            // Select all items between last selected index and current index
+                            int startIndex = Math.Min(lastSelectedSourceIndex, currentIndex);
+                            int endIndex = Math.Max(lastSelectedSourceIndex, currentIndex);
+
+                            for (int i = startIndex; i <= endIndex; i++)
+                            {
+                                ViewModel.SourcePlates[i].IsSelected = true;
+                                ViewModel.SourcePlates[i].SelectionColor = "Secondary";
+                            }
+                        }
+                        else
+                        {
+                            // No previous selection, just select this item
+                            plate.IsSelected = true;
+                            plate.SelectionColor = "Secondary";
+                            lastSelectedSourceIndex = currentIndex;
+                        }
+                    }
+                    else
+                    {
+                        // Normal click behavior
+                        plate.IsSelected = !plate.IsSelected;
+                        plate.SelectionColor = plate.IsSelected ? "Secondary" : null;
+                        lastSelectedSourceIndex = plate.IsSelected ? currentIndex : -1;
+                    }
+
+                    // Notify that plate visuals need to be updated
+                    e.Handled = true;
+                }
+                else
+                {
+                    // Normal mode - select a single plate
+                    ViewModel.TogglePlateSelection(plate);
+                    lastSelectedSourceIndex = -1; // Reset shift selection
+                    e.Handled = true;
+                }
+            }
+        }
+
+        private void DestListView_ItemClicked(object sender, MouseButtonEventArgs e)
+        {
+            ListViewItem item = sender as ListViewItem;
+            if (item?.Content is DestinationPlate plate)
+            {
+                if (ViewModel.IsInSourceAddMode)
+                {
+                    int currentIndex = ViewModel.DestinationPlates.IndexOf(plate);
+
+                    // Check if Shift key is pressed
+                    if (Keyboard.IsKeyDown(Key.LeftShift) || Keyboard.IsKeyDown(Key.RightShift))
+                    {
+                        // If we have a previous selection
+                        if (lastSelectedDestIndex >= 0)
+                        {
+                            // Select all items between last selected index and current index
+                            int startIndex = Math.Min(lastSelectedDestIndex, currentIndex);
+                            int endIndex = Math.Max(lastSelectedDestIndex, currentIndex);
+
+                            for (int i = startIndex; i <= endIndex; i++)
+                            {
+                                ViewModel.DestinationPlates[i].IsSelected = true;
+                                ViewModel.DestinationPlates[i].SelectionColor = "Secondary";
+                            }
+                        }
+                        else
+                        {
+                            // No previous selection, just select this item
+                            plate.IsSelected = true;
+                            plate.SelectionColor = "Secondary";
+                            lastSelectedDestIndex = currentIndex;
+                        }
+                    }
+                    else
+                    {
+                        // Normal click behavior
+                        plate.IsSelected = !plate.IsSelected;
+                        plate.SelectionColor = plate.IsSelected ? "Secondary" : null;
+                        lastSelectedDestIndex = plate.IsSelected ? currentIndex : -1;
+                    }
+
+                    // Notify that plate visuals need to be updated
+                    e.Handled = true;
+                }
+                else
+                {
+                    // Normal mode - select a single plate
+                    ViewModel.TogglePlateSelection(plate);
+                    lastSelectedDestIndex = -1; // Reset shift selection
+                    e.Handled = true;
+                }
+            }
+        }
+
+    }
+
+
+    public class PlateItemTemplateSelector : DataTemplateSelector
+    {
+        public DataTemplate PlateTemplate { get; set; }
+        public DataTemplate AddButtonTemplate { get; set; }
+
+        public override DataTemplate SelectTemplate(object item, DependencyObject container)
+        {
+            if (item is AddButtonViewModel)
+                return AddButtonTemplate;
+            return PlateTemplate;
+        }
     }
 }

@@ -191,7 +191,7 @@
       <Version>1.0.119</Version>
     </PackageReference>
     <PackageReference Include="System.Text.Json">
-      <Version>9.0.1</Version>
+      <Version>9.0.2</Version>
     </PackageReference>
   </ItemGroup>
   <ItemGroup>
@@ -211,6 +211,9 @@
       <Project>{c5539acb-4b8e-483e-adf3-0cb8c4f24d73}</Project>
       <Name>ViewModels</Name>
     </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <WCFMetadata Include="Connected Services\" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

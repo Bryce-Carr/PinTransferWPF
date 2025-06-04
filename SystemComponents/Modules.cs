@@ -62,6 +62,12 @@ namespace Integration
     [JsonConverter(typeof(PlateConverter))]
     public partial class Plate : ObservableObject
     {
+        [ObservableProperty]
+        private bool _isSelected = false;
+
+        [ObservableProperty]
+        private string _selectionColor;
+
         //TODO observable collection?
         private Dictionary<string, bool> _status;
         public Dictionary<string, bool> Status
@@ -522,7 +528,7 @@ namespace Integration
             //{
             //    throw new InvalidOperationException("All stackers are full");
             //}
-            var availableStacker = Stackers[Stack - 1];
+            var availableStacker = Stackers[Stack];
             availableStacker.AddPlate(plate);
         }
 
